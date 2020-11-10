@@ -18,6 +18,11 @@ $ composer require bonsaicms/settings
 $ php artisan vendor:publish --tag=settings
 ```
 
+### Run migrations
+```bash2
+$ php artisan migrate
+```
+
 ### Auto-save Middleware
 Add the following line inside your `app/Http/Kernel.php` file. This middleware will automatically call `Settings::save()` after each request so you won't need to manually call it.
 ```php
