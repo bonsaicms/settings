@@ -2,6 +2,12 @@
     "name": "bonsaicms/settings",
     "type": "package",
     "description": "Settings manager for Laravel",
+    "authors": [
+        {
+            "name": "Matej Vitaz",
+            "email": "mspiderv@gmail.com"
+        }
+    ],
     "keywords": [
         "settings",
         "Bonsai CMS",
