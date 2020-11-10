@@ -25,7 +25,7 @@
     "extra": {
         "laravel": {
             "providers": [
-                "BonsaiCms\\Settings\\ServiceProvider"
+                "BonsaiCms\\Settings\\SettingsServiceProvider"
             ],
             "aliases": {
                 "Settings": "BonsaiCms\\Settings\\SettingsFacade"
