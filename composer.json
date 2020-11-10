@@ -1,0 +1,39 @@
+{
+    "name": "bonsaicms/settings",
+    "type": "package",
+    "description": "Settings manager for Laravel",
+    "keywords": [
+        "settings",
+        "Bonsai CMS",
+        "laravel"
+    ],
+    "license": "MIT",
+    "require": {
+        "php": "^7.3|^8.0",
+        "laravel/framework": "^8.0"
+    },
+    "autoload": {
+        "psr-4": {
+            "BonsaiCms\\Settings\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Tests\\": "tests/"
+        }
+    },
+    "extra": {
+        "laravel": {
+            "providers": [
+                "BonsaiCms\\Settings\\ServiceProvider"
+            ],
+            "aliases": {
+                "Settings": "BonsaiCms\\Settings\\SettingsFacade"
+            }
+        }
+    },
+    "require-dev": {
+        "orchestra/testbench": "^6.4",
+        "mockery/mockery": "^1.3.1"
+    }
+}
