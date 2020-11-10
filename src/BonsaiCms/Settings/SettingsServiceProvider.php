@@ -14,7 +14,7 @@ class SettingsServiceProvider extends ServiceProvider
     public function register()
     {
         $this->mergeConfigFrom(
-            __DIR__.'/../config/settings.php', 'settings'
+            __DIR__.'/../../../config/settings.php', 'settings'
         );
 
         $implementations = config('settings.implementations');
@@ -33,13 +33,13 @@ class SettingsServiceProvider extends ServiceProvider
      */
     public function boot()
     {
-        require_once(__DIR__.'/../helpers/helpers.php');
+        require_once(__DIR__.'/../../../helpers/helpers.php');
 
         $this->publishes([
-            __DIR__.'/../config/settings.php' => config_path('settings.php'),
+            __DIR__.'/../../../config/settings.php' => config_path('settings.php'),
         ]);
 
-        $this->loadMigrationsFrom(__DIR__.'/../database/migrations');
+        $this->loadMigrationsFrom(__DIR__.'/../../../database/migrations');
 
         if ($this->app->runningInConsole()) {
             $this->commands([
