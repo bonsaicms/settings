@@ -45,10 +45,6 @@ class SettingsManager implements Contracts\SettingsManager
     protected function initializeCache ()
     {
         $this->cache = new Collection;
-
-        if (config('settings.autoload')) {
-            $this->all();
-        }
     }
 
     /**
@@ -129,9 +125,18 @@ class SettingsManager implements Contracts\SettingsManager
 
     public function get($keyOrKeys)
     {
+        $this->autoloadIfNeeded();
+
         return (is_string($keyOrKeys))
             ? $this->getOne($keyOrKeys)
             : $this->getMany($keyOrKeys);
+    }
+
+    protected function autoloadIfNeeded()
+    {
+        if ( ! $this->loadedAll && config('settings.autoload')) {
+            $this->all();
+        }
     }
 
     public function has($key) : bool
