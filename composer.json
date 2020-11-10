@@ -14,7 +14,7 @@
     },
     "autoload": {
         "psr-4": {
-            "BonsaiCms\\Settings\\": "src/"
+            "\\": "src/"
         }
     },
     "autoload-dev": {
