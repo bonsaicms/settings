@@ -13,6 +13,11 @@ For example, this package is able to save **any value** in the settings (numbers
 $ composer require bonsaicms/settings
 ```
 
+### Publish config file 
+```bash2
+$ php artisan vendor:publish --tag=settings
+```
+
 ### Auto-save Middleware
 Add the following line inside your `app/Http/Kernel.php` file. This middleware will automatically call `Settings::save()` after each request so you won't need to manually call it.
 ```php
