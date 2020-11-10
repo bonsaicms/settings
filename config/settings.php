@@ -7,7 +7,7 @@ return [
     | Read all settings from the repository when the service provider boots ?
     |--------------------------------------------------------------------------
     */
-    'autoload' => false,
+    'autoload' => true,
 
     /*
     |--------------------------------------------------------------------------
