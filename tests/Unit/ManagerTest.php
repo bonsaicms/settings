@@ -388,55 +388,55 @@ class ManagerTest extends TestCase
         $this->assertEquals($this->manager->get('b'), 'B');
     }
 
-    public function testMadeChangesOnSetValue()
+    public function testIsDirtysOnSetValue()
     {
-        $this->assertFalse($this->manager->getMadeChanges());
+        $this->assertFalse($this->manager->isDirty());
         $this->manager->set('a', 'A');
-        $this->assertTrue($this->manager->getMadeChanges());
+        $this->assertTrue($this->manager->isDirty());
     }
 
-    public function testMadeChangesOnSetNull()
+    public function testIsDirtysOnSetNull()
     {
-        $this->assertFalse($this->manager->getMadeChanges());
+        $this->assertFalse($this->manager->isDirty());
         $this->manager->set('a', null);
-        $this->assertTrue($this->manager->getMadeChanges());
+        $this->assertTrue($this->manager->isDirty());
     }
 
-    public function testMadeChangesOnSetMany()
+    public function testIsDirtysOnSetMany()
     {
-        $this->assertFalse($this->manager->getMadeChanges());
+        $this->assertFalse($this->manager->isDirty());
         $this->manager->set([
             'a' => 'A',
             'b' => null
         ]);
-        $this->assertTrue($this->manager->getMadeChanges());
+        $this->assertTrue($this->manager->isDirty());
     }
 
-    public function testMadeChangesOnSetManyEmpty()
+    public function testIsDirtysOnSetManyEmpty()
     {
-        $this->assertFalse($this->manager->getMadeChanges());
+        $this->assertFalse($this->manager->isDirty());
         $this->manager->set([]);
-        $this->assertFalse($this->manager->getMadeChanges());
+        $this->assertFalse($this->manager->isDirty());
     }
 
-    public function testMadeChangesIsFalseAfterRefresh()
+    public function testIsDirtysIsFalseAfterRefresh()
     {
-        $this->assertFalse($this->manager->getMadeChanges());
+        $this->assertFalse($this->manager->isDirty());
         $this->manager->set('a', 'A');
-        $this->assertTrue($this->manager->getMadeChanges());
+        $this->assertTrue($this->manager->isDirty());
         $this->manager->refresh();
-        $this->assertFalse($this->manager->getMadeChanges());
+        $this->assertFalse($this->manager->isDirty());
     }
 
-    public function testMadeChangesIsFalseAfterSave()
+    public function testIsDirtysIsFalseAfterSave()
     {
         $this->settingsSerializer->shouldReceive('serialize')->with('A')->andReturn('A-ser');
         $this->settingsRepository->shouldReceive('setItem')->with('a', 'A-ser');
 
-        $this->assertFalse($this->manager->getMadeChanges());
+        $this->assertFalse($this->manager->isDirty());
         $this->manager->set('a', 'A');
-        $this->assertTrue($this->manager->getMadeChanges());
+        $this->assertTrue($this->manager->isDirty());
         $this->manager->save();
-        $this->assertFalse($this->manager->getMadeChanges());
+        $this->assertFalse($this->manager->isDirty());
     }
 }

@@ -50,5 +50,5 @@ interface SettingsManager
 
     function refresh() : void;
 
-    function getMadeChanges() : bool;
+    function isDirty() : bool;
 }

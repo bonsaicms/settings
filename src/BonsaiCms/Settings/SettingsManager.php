@@ -7,8 +7,8 @@ use Illuminate\Support\Collection;
 class SettingsManager implements Contracts\SettingsManager
 {
     protected $cache;
+    protected $dirty = false;
     protected $loadedAll = false;
-    protected $madeChanges = false;
 
     /**
      * @var Contracts\SettingsRepository
@@ -109,7 +109,7 @@ class SettingsManager implements Contracts\SettingsManager
     {
         $this->cache[$key] = $value;
 
-        $this->setMadeChanges();
+        $this->setDirty();
 
         return $this;
     }
@@ -120,7 +120,7 @@ class SettingsManager implements Contracts\SettingsManager
     protected function setMany($items = [])
     {
         if (count($items) > 0) {
-            $this->setMadeChanges();
+            $this->setDirty();
         }
 
         foreach ($items as $key => $value) {
@@ -229,7 +229,7 @@ class SettingsManager implements Contracts\SettingsManager
             }
         }
 
-        $this->setMadeChanges(false);
+        $this->setDirty(false);
     }
 
     protected function getCachedKeys(): Collection
@@ -254,7 +254,7 @@ class SettingsManager implements Contracts\SettingsManager
         $this->cache = null;
         $this->loadedAll = false;
 
-        $this->setMadeChanges(false);
+        $this->setDirty(false);
 
         $this->initializeCache();
     }
@@ -266,13 +266,13 @@ class SettingsManager implements Contracts\SettingsManager
         $this->repository->deleteAll();
     }
 
-    protected function setMadeChanges($madeChanges = true) : void
+    protected function setDirty($dirty = true) : void
     {
-        $this->madeChanges = $madeChanges;
+        $this->dirty = $dirty;
     }
 
-    public function getMadeChanges() : bool
+    public function isDirty() : bool
     {
-        return $this->madeChanges;
+        return $this->dirty;
     }
 }

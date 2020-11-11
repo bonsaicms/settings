@@ -18,7 +18,7 @@ class SaveSettings
     {
         $response = $next($request);
 
-        if ($this->settingsManager->getMadeChanges()) {
+        if ($this->settingsManager->isDirty()) {
             $this->settingsManager->save();
         }
 
