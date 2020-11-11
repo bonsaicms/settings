@@ -186,6 +186,10 @@ Settings::get('obj'); // same as $myObject (but probably not equal, depends on w
 Settings::save('obj');
 ```
 
+# Settings and JSON-like API
+
+Do you need to work with settings via API ? Check out our [bonsaicms/settings-api](https://github.com/bonsaicms/settings-api) package.
+
 # Tested with database systems
 The values are stored it in a `binary` database column type (if you use `DatabaseSettingsRepository`).
 
