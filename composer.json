@@ -20,7 +20,7 @@
     },
     "autoload": {
         "psr-4": {
-            "BonsaiCms\\": "src/BonsaiCms/"
+            "BonsaiCms\\Settings\\": "src/BonsaiCms/Settings/"
         }
     },
     "autoload-dev": {
