@@ -7,7 +7,7 @@ return [
     | Read all settings from the repository when the service provider boots ?
     |--------------------------------------------------------------------------
     */
-    'autoload' => true,
+    'autoload' => true, // TODO: potrebujem to vobec ?
 
     /*
     |--------------------------------------------------------------------------

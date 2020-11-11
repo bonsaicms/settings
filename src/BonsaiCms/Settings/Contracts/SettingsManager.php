@@ -47,4 +47,6 @@ interface SettingsManager
     function save() : void;
 
     function deleteAll() : void;
+
+    function refresh() : void;
 }

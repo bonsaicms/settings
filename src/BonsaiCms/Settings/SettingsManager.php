@@ -97,8 +97,6 @@ class SettingsManager implements Contracts\SettingsManager
 
     public function set($keyOrPairs, $valueOrNull = null) : void
     {
-        $this->autoloadIfNeeded();
-
         if (is_string($keyOrPairs)) {
             $this->setOne($keyOrPairs, $valueOrNull);
         } else {
@@ -127,19 +125,11 @@ class SettingsManager implements Contracts\SettingsManager
 
     public function get($keyOrKeys)
     {
-        $this->autoloadIfNeeded();
-
         return (is_string($keyOrKeys))
             ? $this->getOne($keyOrKeys)
             : $this->getMany($keyOrKeys);
     }
 
-    protected function autoloadIfNeeded()
-    {
-        if ( ! $this->loadedAll && config('settings.autoload')) {
-            $this->all();
-        }
-    }
 
     public function has($key) : bool
     {
@@ -155,8 +145,8 @@ class SettingsManager implements Contracts\SettingsManager
                     ->getAll()
             )
                 ->diffKeys($this->getCachedKeys()->flip())
-            ->map(function ($serializedValue) {
-                return $this->deserializer->deserialize($serializedValue);
+            ->map(function ($serialized) {
+                return $this->deserializer->deserialize($serialized);
             })
             ->merge($this->cache);
 
@@ -166,12 +156,23 @@ class SettingsManager implements Contracts\SettingsManager
         return $this->cache;
     }
 
+    protected function shouldSerialize($value)
+    {
+        return ($value !== null);
+    }
+
+    protected function shouldDeserialize($value)
+    {
+        return ($value !== null);
+    }
+
     protected function getOne($key)
     {
         if ( ! $this->isCached($key) && $this->loadedAll === false) {
-            $this->cache[$key] = $this->deserializer->deserialize(
-                $this->repository->getItem($key)
-            );
+            $serialized = $this->repository->getItem($key);
+            $this->cache[$key] = $this->shouldDeserialize($serialized)
+                ? $this->deserializer->deserialize($serialized)
+                : $serialized;
         }
 
         return $this->cache->get($key);
@@ -190,8 +191,10 @@ class SettingsManager implements Contracts\SettingsManager
                         ->repository
                         ->getItems($missingKeys->toArray())
                 )
-                ->map(function ($serializedValue) {
-                    return $this->deserializer->deserialize($serializedValue);
+                ->map(function ($serialized) {
+                    return $this->shouldDeserialize($serialized)
+                        ? $this->deserializer->deserialize($serialized)
+                        : $serialized;
                 })
             );
         }
@@ -205,8 +208,10 @@ class SettingsManager implements Contracts\SettingsManager
 
     public function save() : void
     {
-        $items = $this->cache->map(function ($deserializedValue) {
-            return $this->serializer->serialize($deserializedValue);
+        $items = $this->cache->map(function ($deserialized) {
+            return $this->shouldSerialize($deserialized)
+                ? $this->serializer->serialize($deserialized)
+                : $deserialized;
         });
 
         if ($items->isNotEmpty()) {
@@ -235,14 +240,12 @@ class SettingsManager implements Contracts\SettingsManager
             : new Collection($mixed);
     }
 
-    public function refresh(): self
+    public function refresh() : void
     {
         $this->cache = null;
         $this->loadedAll = false;
 
         $this->initializeCache();
-
-        return $this;
     }
 
     public function deleteAll() : void
