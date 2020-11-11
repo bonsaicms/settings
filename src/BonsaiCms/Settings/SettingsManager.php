@@ -8,6 +8,7 @@ class SettingsManager implements Contracts\SettingsManager
 {
     protected $cache;
     protected $loadedAll = false;
+    protected $madeChanges = false;
 
     /**
      * @var Contracts\SettingsRepository
@@ -108,6 +109,8 @@ class SettingsManager implements Contracts\SettingsManager
     {
         $this->cache[$key] = $value;
 
+        $this->setMadeChanges();
+
         return $this;
     }
 
@@ -116,6 +119,10 @@ class SettingsManager implements Contracts\SettingsManager
      */
     protected function setMany($items = [])
     {
+        if (count($items) > 0) {
+            $this->setMadeChanges();
+        }
+
         foreach ($items as $key => $value) {
             $this->setOne($key, $value);
         }
@@ -221,6 +228,8 @@ class SettingsManager implements Contracts\SettingsManager
                 $this->repository->setItem($items->keys()->first(), $items->first());
             }
         }
+
+        $this->setMadeChanges(false);
     }
 
     protected function getCachedKeys(): Collection
@@ -245,6 +254,8 @@ class SettingsManager implements Contracts\SettingsManager
         $this->cache = null;
         $this->loadedAll = false;
 
+        $this->setMadeChanges(false);
+
         $this->initializeCache();
     }
 
@@ -253,5 +264,15 @@ class SettingsManager implements Contracts\SettingsManager
         $this->cache = new Collection;
         $this->loadedAll = true;
         $this->repository->deleteAll();
+    }
+
+    protected function setMadeChanges($madeChanges = true) : void
+    {
+        $this->madeChanges = $madeChanges;
+    }
+
+    public function getMadeChanges() : bool
+    {
+        return $this->madeChanges;
     }
 }

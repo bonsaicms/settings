@@ -49,4 +49,6 @@ interface SettingsManager
     function deleteAll() : void;
 
     function refresh() : void;
+
+    function getMadeChanges() : bool;
 }

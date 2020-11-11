@@ -387,4 +387,56 @@ class ManagerTest extends TestCase
         $this->assertEquals($this->manager->get('a'), 'A');
         $this->assertEquals($this->manager->get('b'), 'B');
     }
+
+    public function testMadeChangesOnSetValue()
+    {
+        $this->assertFalse($this->manager->getMadeChanges());
+        $this->manager->set('a', 'A');
+        $this->assertTrue($this->manager->getMadeChanges());
+    }
+
+    public function testMadeChangesOnSetNull()
+    {
+        $this->assertFalse($this->manager->getMadeChanges());
+        $this->manager->set('a', null);
+        $this->assertTrue($this->manager->getMadeChanges());
+    }
+
+    public function testMadeChangesOnSetMany()
+    {
+        $this->assertFalse($this->manager->getMadeChanges());
+        $this->manager->set([
+            'a' => 'A',
+            'b' => null
+        ]);
+        $this->assertTrue($this->manager->getMadeChanges());
+    }
+
+    public function testMadeChangesOnSetManyEmpty()
+    {
+        $this->assertFalse($this->manager->getMadeChanges());
+        $this->manager->set([]);
+        $this->assertFalse($this->manager->getMadeChanges());
+    }
+
+    public function testMadeChangesIsFalseAfterRefresh()
+    {
+        $this->assertFalse($this->manager->getMadeChanges());
+        $this->manager->set('a', 'A');
+        $this->assertTrue($this->manager->getMadeChanges());
+        $this->manager->refresh();
+        $this->assertFalse($this->manager->getMadeChanges());
+    }
+
+    public function testMadeChangesIsFalseAfterSave()
+    {
+        $this->settingsSerializer->shouldReceive('serialize')->with('A')->andReturn('A-ser');
+        $this->settingsRepository->shouldReceive('setItem')->with('a', 'A-ser');
+
+        $this->assertFalse($this->manager->getMadeChanges());
+        $this->manager->set('a', 'A');
+        $this->assertTrue($this->manager->getMadeChanges());
+        $this->manager->save();
+        $this->assertFalse($this->manager->getMadeChanges());
+    }
 }
