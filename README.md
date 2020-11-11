@@ -23,13 +23,22 @@ $ php artisan vendor:publish --tag=settings
 $ php artisan migrate
 ```
 
+### Auto-load Middleware
+Add the following line inside your `app/Http/Kernel.php` file. This middleware will automatically call `Settings::all()` before each request so whenever you call `Settings::get()` there will be no DB query executed, because all settings will be already in the cache.
+```php
+protected $middleware = [
+    ...
++   \BonsaiCms\Settings\Http\Middleware\LoadSettings::class,
+];
+```
+
 ### Auto-save Middleware
 Add the following line inside your `app/Http/Kernel.php` file. This middleware will automatically call `Settings::save()` after each request so you won't need to manually call it.
 ```php
-    protected $middleware = [
-        ...
-+        \BonsaiCms\Settings\Http\Middleware\SaveSettings::class,
-    ];
+protected $middleware = [
+    ...
++   \BonsaiCms\Settings\Http\Middleware\SaveSettings::class,
+];
 ```
 
 # Usage
