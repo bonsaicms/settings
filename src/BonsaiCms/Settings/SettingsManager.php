@@ -97,6 +97,8 @@ class SettingsManager implements Contracts\SettingsManager
 
     public function set($keyOrPairs, $valueOrNull = null) : void
     {
+        $this->autoloadIfNeeded();
+
         if (is_string($keyOrPairs)) {
             $this->setOne($keyOrPairs, $valueOrNull);
         } else {

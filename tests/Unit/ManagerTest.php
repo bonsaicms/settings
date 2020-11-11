@@ -110,11 +110,6 @@ class ManagerTest extends TestCase
     {
         config()->set('settings.autoload', true);
 
-        $this->settingsRepository
-            ->shouldReceive('getAll')
-            ->once()
-            ->andReturn([]);
-
         new SettingsManager(
             $this->settingsRepository,
             $this->settingsSerializer,
