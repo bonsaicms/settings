@@ -78,9 +78,9 @@ Settings::get(['a', 'b', 'x']);
 ```
 
 ## Set / Get Eloquent Models
-TODO: you need to implement & include trait
+**To make this work, your models need to implement our** `BonsaiCms\Settings\Contracts\SerializationWrappable` interface. You can implement serialization logic by yourself, but you can also use our `BonsaiCms\Settings\Models\SerializableModelTrait` trait.
 
-This will **NOT serialize the model's attributes**! It will only serialize the model identity (model name + ID) and it will retrieve that model from the database when you call `Settings::get(...)`.
+Our `BonsaiCms\Settings\Models\SerializableModelTrait` will **NOT serialize the model's attributes**! It will only serialize the model identity (model name + ID) and it will retrieve that model from the database when you call `Settings::get(...)`.
 ```php
 // MyModel extends Eloquent
 $model = MyModel::first(); // some model instance (not null)
@@ -91,6 +91,19 @@ Settings::save();
 // On the same or on the some future request as well...
 $retrievedModel->is($model); // true
 ```
+
+If you need different serialization behaviour you need to implement your own serialization logic by implementing our `BonsaiCms\Settings\Contracts\SerializationWrappable` interface.
+
+#### Example of your model class
+```php
+use Illuminate\Database\Eloquent\Model as Eloquent;
+
+class MyModel extends Eloquent implements \BonsaiCms\Settings\Contracts\SerializationWrappable
+{
+    use \BonsaiCms\Settings\Models\SerializableModelTrait;
+    ...
+```
+
 ## Has
 ```php
 Settings::set('someting', 1);
