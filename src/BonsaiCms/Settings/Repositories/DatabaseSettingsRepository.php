@@ -20,7 +20,7 @@ class DatabaseSettingsRepository implements SettingsRepository
         if ($value === null) {
             $this->model::whereKey($key)->delete();
         } else {
-            $this->model::firstOrCreate(
+            $this->model::updateOrCreate(
                 [
                     'key' => $key,
                 ],
