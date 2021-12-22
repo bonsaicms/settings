@@ -43,7 +43,7 @@ class SettingsManager implements Contracts\SettingsManager
         $this->initializeCache();
     }
 
-    protected function initializeCache ()
+    protected function initializeCache()
     {
         $this->cache = new Collection;
     }
