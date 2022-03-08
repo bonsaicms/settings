@@ -15,7 +15,7 @@ class BonsaiCmsCreateSettingsTable extends Migration
     {
         Schema::create(config('settings.database.table'), function (Blueprint $table) {
             $table->string('key')->unique();
-            $table->binary('value');
+            $table->text('value');
             $table->timestamps();
 
             $table->primary('key');

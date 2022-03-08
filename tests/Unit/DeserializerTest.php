@@ -31,6 +31,7 @@ class DeserializerTest extends TestCase
     {
         $this->assertProcess('');
         $this->assertProcess('test');
+        $this->assertProcess('text \' with " quotes');
         $this->assertProcess(1);
         $this->assertProcess(1.5);
         $this->assertProcess(true);

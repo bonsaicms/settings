@@ -5,8 +5,9 @@ For example, this package is able to save **any value** in the settings (numbers
 
 # How it works
 
-1. This package serialize the setting value (using the PHP's `serialize` function).
-2. The value is stored it in a `binary` database column type (if you use `DatabaseSettingsRepository`).
+1. This package serialize the setting value (using the PHP's `serialize` and `base64_encode` functions).
+2. The value is stored it in a `text` database column type (if you use `DatabaseSettingsRepository`).
+3. When reading the setting value, the serialized value is decoded (via PHP `base64_decode` function) and then deserialized (via PHP `deserialize` function).
 
 # Installation
 ```bash2
@@ -211,14 +212,6 @@ Settings::save('obj');
 # Settings and JSON-like API
 
 Do you need to work with settings via API ? Check out our [bonsaicms/settings-api](https://github.com/bonsaicms/settings-api) package.
-
-# Tested with database systems
-The values are stored it in a `binary` database column type (if you use `DatabaseSettingsRepository`).
-
-- Postgres 10.14
-- MariaDB 10.3
-- MySQL 8.0
-- MySQL 5.7
 
 # Testing
 ```bash2

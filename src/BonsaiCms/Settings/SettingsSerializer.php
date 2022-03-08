@@ -25,12 +25,7 @@ class SettingsSerializer implements SettingsSerializerContract
 
             $value = serialize($value);
 
-            $dbConnection = DB::connection(Config::get('settings.database.connection'));
-            if ($dbConnection instanceof PostgresConnection) {
-                // Make sure we are connected to DB (https://stackoverflow.com/q/34235839/2987610)
-                $dbConnection->getPdo();
-                $value = pg_escape_bytea($value);
-            }
+            $value = base64_encode($value);
 
             return $value;
         } catch (Exception $e) {

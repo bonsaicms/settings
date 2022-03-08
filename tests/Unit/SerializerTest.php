@@ -29,6 +29,7 @@ class SerializerTest extends TestCase
     {
         $this->assertSerialized($this->serializer->serialize(''));
         $this->assertSerialized($this->serializer->serialize('test'));
+        $this->assertSerialized($this->serializer->serialize('text \' with " quotes'));
         $this->assertSerialized($this->serializer->serialize(1));
         $this->assertSerialized($this->serializer->serialize(1.5));
         $this->assertSerialized($this->serializer->serialize(true));

@@ -18,9 +18,7 @@ class SettingsDeserializer implements SettingsDeserializerContract
                 return null;
             }
 
-            if (DB::connection(Config::get('settings.database.connection')) instanceof PostgresConnection) {
-                $value = stream_get_contents($value);
-            }
+            $value = base64_decode($value);
 
             $value = unserialize($value);
 
