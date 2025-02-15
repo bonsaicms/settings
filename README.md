@@ -216,5 +216,5 @@ Do you need to work with settings via API ? Check out our [bonsaicms/settings-ap
 # Testing
 ```bash2
 $ composer install
-$ ./vendor/bin/phpunit 
+$ composer test
 ```
