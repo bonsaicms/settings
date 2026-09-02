@@ -1,37 +1,23 @@
 <?php
 
-namespace Tests\Unit;
-
-use Tests\TestCase;
 use Tests\Mocks\TestWrappableClass;
 use BonsaiCms\Settings\SettingsSerializer;
 use BonsaiCms\Settings\SettingsDeserializer;
 
-class SerializationWrappableTest extends TestCase
-{
-    protected $settingsSerializer;
+beforeEach(function () {
+    $this->serializer = new SettingsSerializer;
+    $this->deserializer = new SettingsDeserializer;
+});
 
-    /**
-     * Setup the test environment.
-     */
-    protected function setUp(): void
-    {
-        parent::setUp();
+it('wraps a wrappable object before serialization and unwraps it back', function () {
+    $secret = 'some-secret';
 
-        $this->serializer = new SettingsSerializer;
-        $this->deserializer = new SettingsDeserializer;
-    }
+    $wrappableObject = new TestWrappableClass($secret);
 
-    public function testWrapBeforeSerialization()
-    {
-        $secret = 'some-secret';
+    $serialized = $this->serializer->serialize($wrappableObject);
 
-        $wrappableObject = new TestWrappableClass($secret);
+    $deserialized = $this->deserializer->deserialize($serialized);
 
-        $serialized = $this->serializer->serialize($wrappableObject);
-
-        $deserialized = $this->deserializer->deserialize($serialized);
-
-        $this->assertEquals("{$secret}-was-unwrapped-".get_class($wrappableObject), $deserialized->getSecret());
-    }
-}
+    expect($deserialized->getSecret())
+        ->toEqual("{$secret}-was-unwrapped-".get_class($wrappableObject));
+});

@@ -1,58 +1,23 @@
 <?php
 
-namespace Tests\Unit;
-
-use stdClass;
-use Tests\TestCase;
 use BonsaiCms\Settings\SettingsSerializer;
 
-class SerializerTest extends TestCase
-{
-    protected $settingsSerializer;
+beforeEach(function () {
+    $this->serializer = new SettingsSerializer;
+});
 
-    /**
-     * Setup the test environment.
-     */
-    protected function setUp(): void
-    {
-        parent::setUp();
+it('serializes null to null', function () {
+    expect($this->serializer->serialize(null))->toBeNull();
+});
 
-        $this->serializer = new SettingsSerializer;
-    }
+it('serializes primitives to a non empty string', function ($value) {
+    expect($this->serializer->serialize($value))
+        ->toBeString()
+        ->not->toBeEmpty();
+})->with('primitives');
 
-    public function testSerializeToNull()
-    {
-        $this->assertNull($this->serializer->serialize(null));
-    }
-
-    public function testSerializePrimitives()
-    {
-        $this->assertSerialized($this->serializer->serialize(''));
-        $this->assertSerialized($this->serializer->serialize('test'));
-        $this->assertSerialized($this->serializer->serialize('text \' with " quotes'));
-        $this->assertSerialized($this->serializer->serialize(1));
-        $this->assertSerialized($this->serializer->serialize(1.5));
-        $this->assertSerialized($this->serializer->serialize(true));
-        $this->assertSerialized($this->serializer->serialize(false));
-        $this->assertSerialized($this->serializer->serialize([]));
-        $this->assertSerialized($this->serializer->serialize([1,2,3]));
-        $this->assertSerialized($this->serializer->serialize(['a' => 'A', 'b' => 'B']));
-    }
-
-    public function testSerializeObjects()
-    {
-        $this->assertSerialized($this->serializer->serialize(new stdClass));
-        $this->assertSerialized($this->serializer->serialize((object)['a' => 'A', 'b' => 'B']));
-
-        $object = new stdClass;
-        $object->a = "A";
-        $object->b = "B";
-        $this->assertSerialized($this->serializer->serialize($object));
-    }
-
-    protected function assertSerialized($value)
-    {
-        $this->assertTrue(is_string($value));
-        $this->assertTrue(strlen($value) > 0);
-    }
-}
+it('serializes objects to a non empty string', function ($value) {
+    expect($this->serializer->serialize($value))
+        ->toBeString()
+        ->not->toBeEmpty();
+})->with('objects');

@@ -1,442 +1,394 @@
 <?php
 
-namespace Tests\Unit;
-
-use Mockery;
-use Tests\TestCase;
-
 use BonsaiCms\Settings\Contracts\SettingsRepository;
 use BonsaiCms\Settings\Contracts\SettingsSerializer;
 use BonsaiCms\Settings\Contracts\SettingsDeserializer;
 use BonsaiCms\Settings\SettingsManager;
 
-class ManagerTest extends TestCase
-{
-    protected $manager;
-    protected $settingsRepository;
-    protected $settingsSerializer;
-    protected $settingsDeserializer;
+beforeEach(function () {
+    $this->settingsRepository = Mockery::mock(SettingsRepository::class);
+    $this->settingsSerializer = Mockery::mock(SettingsSerializer::class);
+    $this->settingsDeserializer = Mockery::mock(SettingsDeserializer::class);
 
-    /**
-     * Setup the test environment.
-     */
-    protected function setUp(): void
-    {
-        parent::setUp();
-
-        $this->settingsRepository = Mockery::mock(SettingsRepository::class);
-        $this->settingsSerializer = Mockery::mock(SettingsSerializer::class);
-        $this->settingsDeserializer = Mockery::mock(SettingsDeserializer::class);
-
-        $this->manager = new SettingsManager(
-            $this->settingsRepository,
-            $this->settingsSerializer,
-            $this->settingsDeserializer
-        );
-    }
-
-    public function testGetRepository()
-    {
-        $this->assertEquals(
-            $this->manager->getRepository(),
-            $this->settingsRepository
-        );
-
-        $secondRepository = Mockery::mock(SettingsRepository::class);
-
-        $this->assertNull(
-            $this->manager->setRepository($secondRepository)
-        );
-
-        $this->assertEquals(
-            $this->manager->getRepository(),
-            $secondRepository
-        );
-    }
-
-    public function testGetSerializer()
-    {
-        $this->assertEquals(
-            $this->manager->getSerializer(),
-            $this->settingsSerializer
-        );
-
-        $secondSerializer = Mockery::mock(SettingsSerializer::class);
-
-        $this->assertNull(
-            $this->manager->setSerializer($secondSerializer)
-        );
-
-        $this->assertEquals(
-            $this->manager->getSerializer(),
-            $secondSerializer
-        );
-    }
-
-    public function testGetDeserializer()
-    {
-        $this->assertEquals(
-            $this->manager->getDeserializer(),
-            $this->settingsDeserializer
-        );
-
-        $secondDeserializer = Mockery::mock(SettingsDeserializer::class);
-
-        $this->assertNull(
-            $this->manager->setDeserializer($secondDeserializer)
-        );
-
-        $this->assertEquals(
-            $this->manager->getDeserializer(),
-            $secondDeserializer
-        );
-    }
-
-    public function testShouldCallDeleteAllOnRepository()
-    {
-        $this->settingsRepository
-            ->shouldReceive('deleteAll')
-            ->once();
-        $this->manager->deleteAll();
-
-        $this->settingsRepository
-            ->shouldReceive('deleteAll')
-            ->once();
-        $this->manager->deleteAll();
-    }
-
-    public function testGetItem()
-    {
-        $this->settingsRepository
-            ->shouldReceive('getItem')
-            ->with('a')
-            ->once()
-            ->andReturn('A-ser');
-
+    $this->manager = new SettingsManager(
+        $this->settingsRepository,
+        $this->settingsSerializer,
         $this->settingsDeserializer
-            ->shouldReceive('deserialize')
-            ->once()
-            ->with('A-ser')
-            ->andReturn('A');
+    );
+});
 
-        $this->assertEquals($this->manager->get('a'), 'A');
-    }
+it('gets and sets the repository', function () {
+    expect($this->manager->getRepository())->toEqual($this->settingsRepository);
 
-    public function testGetNullItem()
-    {
-        $this->settingsRepository
-            ->shouldReceive('getItem')
-            ->with('a')
-            ->once()
-            ->andReturn(null);
+    $secondRepository = Mockery::mock(SettingsRepository::class);
 
-        $this->assertEquals($this->manager->get('a'), null);
-    }
+    expect($this->manager->setRepository($secondRepository))->toBeNull();
 
-    public function testGetOneNonNullAndOneNullItem()
-    {
-        $this->settingsRepository
-            ->shouldReceive('getItems')
-            ->with(['a', 'b'])
-            ->once()
-            ->andReturn([
-                'a' => 'A-ser',
-                'b' => null,
-            ]);
+    expect($this->manager->getRepository())->toEqual($secondRepository);
+});
 
-        $this->settingsDeserializer
-            ->shouldReceive('deserialize')
-            ->once()
-            ->with('A-ser')
-            ->andReturn('A');
+it('gets and sets the serializer', function () {
+    expect($this->manager->getSerializer())->toEqual($this->settingsSerializer);
 
-        $this->assertEquals($this->toArray($this->manager->get(['a', 'b'])), [
-            'a' => 'A',
+    $secondSerializer = Mockery::mock(SettingsSerializer::class);
+
+    expect($this->manager->setSerializer($secondSerializer))->toBeNull();
+
+    expect($this->manager->getSerializer())->toEqual($secondSerializer);
+});
+
+it('gets and sets the deserializer', function () {
+    expect($this->manager->getDeserializer())->toEqual($this->settingsDeserializer);
+
+    $secondDeserializer = Mockery::mock(SettingsDeserializer::class);
+
+    expect($this->manager->setDeserializer($secondDeserializer))->toBeNull();
+
+    expect($this->manager->getDeserializer())->toEqual($secondDeserializer);
+});
+
+it('calls deleteAll on the repository', function () {
+    $this->settingsRepository
+        ->shouldReceive('deleteAll')
+        ->once();
+    $this->manager->deleteAll();
+
+    $this->settingsRepository
+        ->shouldReceive('deleteAll')
+        ->once();
+    $this->manager->deleteAll();
+});
+
+it('gets one item', function () {
+    $this->settingsRepository
+        ->shouldReceive('getItem')
+        ->with('a')
+        ->once()
+        ->andReturn('A-ser');
+
+    $this->settingsDeserializer
+        ->shouldReceive('deserialize')
+        ->once()
+        ->with('A-ser')
+        ->andReturn('A');
+
+    expect($this->manager->get('a'))->toEqual('A');
+});
+
+it('gets one null item without deserializing it', function () {
+    $this->settingsRepository
+        ->shouldReceive('getItem')
+        ->with('a')
+        ->once()
+        ->andReturn(null);
+
+    expect($this->manager->get('a'))->toBeNull();
+});
+
+it('gets one non null and one null item', function () {
+    $this->settingsRepository
+        ->shouldReceive('getItems')
+        ->with(['a', 'b'])
+        ->once()
+        ->andReturn([
+            'a' => 'A-ser',
             'b' => null,
         ]);
-    }
 
-    public function testGetTwoNullItems()
-    {
-        $this->settingsRepository
-            ->shouldReceive('getItems')
-            ->with(['a', 'b'])
-            ->once()
-            ->andReturn([
-                'a' => null,
-                'b' => null,
-            ]);
+    $this->settingsDeserializer
+        ->shouldReceive('deserialize')
+        ->once()
+        ->with('A-ser')
+        ->andReturn('A');
 
-        $this->assertEquals($this->toArray($this->manager->get(['a', 'b'])), [
+    expect($this->toArray($this->manager->get(['a', 'b'])))->toEqual([
+        'a' => 'A',
+        'b' => null,
+    ]);
+});
+
+it('gets two null items', function () {
+    $this->settingsRepository
+        ->shouldReceive('getItems')
+        ->with(['a', 'b'])
+        ->once()
+        ->andReturn([
             'a' => null,
             'b' => null,
         ]);
-    }
 
-    public function testGetTwoNonNullItems()
-    {
-        $this->settingsRepository
-            ->shouldReceive('getItems')
-            ->with(['a', 'b'])
-            ->once()
-            ->andReturn([
-                'a' => 'A-ser',
-                'b' => 'B-ser',
-            ]);
+    expect($this->toArray($this->manager->get(['a', 'b'])))->toEqual([
+        'a' => null,
+        'b' => null,
+    ]);
+});
 
-        $this->settingsDeserializer
-            ->shouldReceive('deserialize')
-            ->once()
-            ->with('A-ser')
-            ->andReturn('A');
-
-        $this->settingsDeserializer
-            ->shouldReceive('deserialize')
-            ->once()
-            ->with('B-ser')
-            ->andReturn('B');
-
-        $this->assertEquals($this->toArray($this->manager->get(['a', 'b'])), [
-            'a' => 'A',
-            'b' => 'B',
-        ]);
-    }
-
-    public function testBasicSetItem()
-    {
-        $this->manager->set('a', 'A');
-        $this->assertEquals($this->manager->get('a'), 'A');
-    }
-
-    public function testBasicOverrideItem()
-    {
-        $this->manager->set('a', 'A');
-        $this->manager->set('a', 'A2');
-        $this->assertEquals($this->manager->get('a'), 'A2');
-    }
-
-    public function testDeleteItem()
-    {
-        $this->manager->set('a', 'A');
-        $this->manager->set('a', null);
-        $this->assertEquals($this->manager->get('a'), null);
-    }
-
-    public function testBasicSetItemWithSave()
-    {
-        $this->settingsSerializer
-            ->shouldReceive('serialize')
-            ->with('A')
-            ->andReturn('A-ser');
-
-        $this->settingsRepository
-            ->shouldReceive('setItem')
-            ->with('a', 'A-ser');
-
-        $this->manager->set('a', 'A');
-        $this->manager->save();
-        $this->assertEquals($this->manager->get('a'), 'A');
-    }
-
-    public function testBasicSetItemWithSaveWithRefresh()
-    {
-        $this->settingsSerializer
-            ->shouldReceive('serialize')
-            ->with('A')
-            ->andReturn('A-ser');
-
-        $this->settingsRepository
-            ->shouldReceive('setItem')
-            ->with('a', 'A-ser');
-
-        $this->manager->set('a', 'A');
-        $this->manager->save();
-
-        $this->manager->refresh();
-
-        $this->settingsRepository
-            ->shouldReceive('getItem')
-            ->with('a')
-            ->andReturn('A-ser');
-        $this->settingsDeserializer
-            ->shouldReceive('deserialize')
-            ->with('A-ser')
-            ->andReturn('A');
-        $this->assertEquals($this->manager->get('a'), 'A');
-    }
-
-    public function testBasicOverrideItemWithSave()
-    {
-        $this->settingsSerializer
-            ->shouldReceive('serialize')
-            ->with('A')
-            ->andReturn('A-ser');
-        $this->settingsRepository
-            ->shouldReceive('setItem')
-            ->with('a', 'A-ser');
-        $this->manager->set('a', 'A');
-        $this->manager->save();
-        $this->assertEquals($this->manager->get('a'), 'A');
-
-        $this->settingsSerializer
-            ->shouldReceive('serialize')
-            ->with('A2')
-            ->andReturn('A2-ser');
-        $this->settingsRepository
-            ->shouldReceive('setItem')
-            ->with('a', 'A2-ser');
-        $this->manager->set('a', 'A2');
-        $this->manager->save();
-        $this->assertEquals($this->manager->get('a'), 'A2');
-    }
-
-    public function testBasicOverrideItemWithSaveWithRefresh()
-    {
-        $this->settingsSerializer
-            ->shouldReceive('serialize')
-            ->with('A')
-            ->andReturn('A-ser');
-        $this->settingsRepository
-            ->shouldReceive('setItem')
-            ->with('a', 'A-ser');
-        $this->manager->set('a', 'A');
-        $this->manager->save();
-        $this->assertEquals($this->manager->get('a'), 'A');
-
-        $this->settingsSerializer
-            ->shouldReceive('serialize')
-            ->with('A2')
-            ->andReturn('A2-ser');
-        $this->settingsRepository
-            ->shouldReceive('setItem')
-            ->with('a', 'A2-ser');
-        $this->manager->set('a', 'A2');
-        $this->manager->save();
-
-        $this->manager->refresh();
-
-        $this->settingsRepository
-            ->shouldReceive('getItem')
-            ->with('a')
-            ->andReturn('A2-ser');
-        $this->settingsDeserializer
-            ->shouldReceive('deserialize')
-            ->with('A2-ser')
-            ->andReturn('A2');
-        $this->assertEquals($this->manager->get('a'), 'A2');
-    }
-
-    public function testDeleteItemWithSave()
-    {
-        $this->settingsSerializer
-            ->shouldReceive('serialize')
-            ->with('A')
-            ->andReturn('A-ser');
-        $this->settingsRepository
-            ->shouldReceive('setItem')
-            ->with('a', 'A-ser');
-        $this->manager->set('a', 'A');
-        $this->manager->save();
-        $this->assertEquals($this->manager->get('a'), 'A');
-
-        $this->settingsRepository
-            ->shouldReceive('setItem')
-            ->with('a', null);
-        $this->manager->set('a', null);
-        $this->manager->save();
-        $this->assertEquals($this->manager->get('a'), null);
-    }
-
-    public function testSetTwoItems()
-    {
-        $this->manager->set([
-            'a' => 'A',
-            'b' => 'B',
-        ]);
-
-        $this->settingsSerializer->shouldReceive('serialize')->with('A')->andReturn('A-ser');
-        $this->settingsSerializer->shouldReceive('serialize')->with('B')->andReturn('B-ser');
-
-        $this->settingsRepository->shouldReceive('setItems')->with([
+it('gets two non null items', function () {
+    $this->settingsRepository
+        ->shouldReceive('getItems')
+        ->with(['a', 'b'])
+        ->once()
+        ->andReturn([
             'a' => 'A-ser',
             'b' => 'B-ser',
         ]);
 
-        $this->manager->save();
+    $this->settingsDeserializer
+        ->shouldReceive('deserialize')
+        ->once()
+        ->with('A-ser')
+        ->andReturn('A');
 
-        $this->assertEquals($this->manager->get('a'), 'A');
-        $this->assertEquals($this->manager->get('b'), 'B');
-        $this->assertEquals($this->toArray($this->manager->get(['a', 'b'])), [
-            'a' => 'A',
-            'b' => 'B',
-        ]);
+    $this->settingsDeserializer
+        ->shouldReceive('deserialize')
+        ->once()
+        ->with('B-ser')
+        ->andReturn('B');
 
-        $this->manager->refresh();
+    expect($this->toArray($this->manager->get(['a', 'b'])))->toEqual([
+        'a' => 'A',
+        'b' => 'B',
+    ]);
+});
 
-        $this->settingsRepository->shouldReceive('getItems')->with(['a', 'b'])->andReturn([
-            'a' => 'A-ser',
-            'b' => 'B-ser',
-        ]);
+it('sets one item', function () {
+    $this->manager->set('a', 'A');
 
-        $this->settingsDeserializer->shouldReceive('deserialize')->with('A-ser')->andReturn('A');
-        $this->settingsDeserializer->shouldReceive('deserialize')->with('B-ser')->andReturn('B');
-        $this->assertEquals($this->toArray($this->manager->get(['a', 'b'])), [
-            'a' => 'A',
-            'b' => 'B',
-        ]);
-        $this->assertEquals($this->manager->get('a'), 'A');
-        $this->assertEquals($this->manager->get('b'), 'B');
-    }
+    expect($this->manager->get('a'))->toEqual('A');
+});
 
-    public function testIsDirtysOnSetValue()
-    {
-        $this->assertFalse($this->manager->isDirty());
-        $this->manager->set('a', 'A');
-        $this->assertTrue($this->manager->isDirty());
-    }
+it('overrides one item', function () {
+    $this->manager->set('a', 'A');
+    $this->manager->set('a', 'A2');
 
-    public function testIsDirtysOnSetNull()
-    {
-        $this->assertFalse($this->manager->isDirty());
-        $this->manager->set('a', null);
-        $this->assertTrue($this->manager->isDirty());
-    }
+    expect($this->manager->get('a'))->toEqual('A2');
+});
 
-    public function testIsDirtysOnSetMany()
-    {
-        $this->assertFalse($this->manager->isDirty());
-        $this->manager->set([
-            'a' => 'A',
-            'b' => null
-        ]);
-        $this->assertTrue($this->manager->isDirty());
-    }
+it('deletes one item', function () {
+    $this->manager->set('a', 'A');
+    $this->manager->set('a', null);
 
-    public function testIsDirtysOnSetManyEmpty()
-    {
-        $this->assertFalse($this->manager->isDirty());
-        $this->manager->set([]);
-        $this->assertFalse($this->manager->isDirty());
-    }
+    expect($this->manager->get('a'))->toBeNull();
+});
 
-    public function testIsDirtysIsFalseAfterRefresh()
-    {
-        $this->assertFalse($this->manager->isDirty());
-        $this->manager->set('a', 'A');
-        $this->assertTrue($this->manager->isDirty());
-        $this->manager->refresh();
-        $this->assertFalse($this->manager->isDirty());
-    }
+it('sets one item and saves it', function () {
+    $this->settingsSerializer
+        ->shouldReceive('serialize')
+        ->with('A')
+        ->andReturn('A-ser');
 
-    public function testIsDirtysIsFalseAfterSave()
-    {
-        $this->settingsSerializer->shouldReceive('serialize')->with('A')->andReturn('A-ser');
-        $this->settingsRepository->shouldReceive('setItem')->with('a', 'A-ser');
+    $this->settingsRepository
+        ->shouldReceive('setItem')
+        ->with('a', 'A-ser');
 
-        $this->assertFalse($this->manager->isDirty());
-        $this->manager->set('a', 'A');
-        $this->assertTrue($this->manager->isDirty());
-        $this->manager->save();
-        $this->assertFalse($this->manager->isDirty());
-    }
-}
+    $this->manager->set('a', 'A');
+    $this->manager->save();
+
+    expect($this->manager->get('a'))->toEqual('A');
+});
+
+it('reads a saved item from the repository after a refresh', function () {
+    $this->settingsSerializer
+        ->shouldReceive('serialize')
+        ->with('A')
+        ->andReturn('A-ser');
+
+    $this->settingsRepository
+        ->shouldReceive('setItem')
+        ->with('a', 'A-ser');
+
+    $this->manager->set('a', 'A');
+    $this->manager->save();
+
+    $this->manager->refresh();
+
+    $this->settingsRepository
+        ->shouldReceive('getItem')
+        ->with('a')
+        ->andReturn('A-ser');
+    $this->settingsDeserializer
+        ->shouldReceive('deserialize')
+        ->with('A-ser')
+        ->andReturn('A');
+
+    expect($this->manager->get('a'))->toEqual('A');
+});
+
+it('overrides one item and saves it', function () {
+    $this->settingsSerializer
+        ->shouldReceive('serialize')
+        ->with('A')
+        ->andReturn('A-ser');
+    $this->settingsRepository
+        ->shouldReceive('setItem')
+        ->with('a', 'A-ser');
+    $this->manager->set('a', 'A');
+    $this->manager->save();
+    expect($this->manager->get('a'))->toEqual('A');
+
+    $this->settingsSerializer
+        ->shouldReceive('serialize')
+        ->with('A2')
+        ->andReturn('A2-ser');
+    $this->settingsRepository
+        ->shouldReceive('setItem')
+        ->with('a', 'A2-ser');
+    $this->manager->set('a', 'A2');
+    $this->manager->save();
+    expect($this->manager->get('a'))->toEqual('A2');
+});
+
+it('reads an overridden item from the repository after a refresh', function () {
+    $this->settingsSerializer
+        ->shouldReceive('serialize')
+        ->with('A')
+        ->andReturn('A-ser');
+    $this->settingsRepository
+        ->shouldReceive('setItem')
+        ->with('a', 'A-ser');
+    $this->manager->set('a', 'A');
+    $this->manager->save();
+    expect($this->manager->get('a'))->toEqual('A');
+
+    $this->settingsSerializer
+        ->shouldReceive('serialize')
+        ->with('A2')
+        ->andReturn('A2-ser');
+    $this->settingsRepository
+        ->shouldReceive('setItem')
+        ->with('a', 'A2-ser');
+    $this->manager->set('a', 'A2');
+    $this->manager->save();
+
+    $this->manager->refresh();
+
+    $this->settingsRepository
+        ->shouldReceive('getItem')
+        ->with('a')
+        ->andReturn('A2-ser');
+    $this->settingsDeserializer
+        ->shouldReceive('deserialize')
+        ->with('A2-ser')
+        ->andReturn('A2');
+
+    expect($this->manager->get('a'))->toEqual('A2');
+});
+
+it('deletes one item and saves it', function () {
+    $this->settingsSerializer
+        ->shouldReceive('serialize')
+        ->with('A')
+        ->andReturn('A-ser');
+    $this->settingsRepository
+        ->shouldReceive('setItem')
+        ->with('a', 'A-ser');
+    $this->manager->set('a', 'A');
+    $this->manager->save();
+    expect($this->manager->get('a'))->toEqual('A');
+
+    $this->settingsRepository
+        ->shouldReceive('setItem')
+        ->with('a', null);
+    $this->manager->set('a', null);
+    $this->manager->save();
+    expect($this->manager->get('a'))->toBeNull();
+});
+
+it('sets two items and saves them at once', function () {
+    $this->manager->set([
+        'a' => 'A',
+        'b' => 'B',
+    ]);
+
+    $this->settingsSerializer->shouldReceive('serialize')->with('A')->andReturn('A-ser');
+    $this->settingsSerializer->shouldReceive('serialize')->with('B')->andReturn('B-ser');
+
+    $this->settingsRepository->shouldReceive('setItems')->with([
+        'a' => 'A-ser',
+        'b' => 'B-ser',
+    ]);
+
+    $this->manager->save();
+
+    expect($this->manager->get('a'))->toEqual('A');
+    expect($this->manager->get('b'))->toEqual('B');
+    expect($this->toArray($this->manager->get(['a', 'b'])))->toEqual([
+        'a' => 'A',
+        'b' => 'B',
+    ]);
+
+    $this->manager->refresh();
+
+    $this->settingsRepository->shouldReceive('getItems')->with(['a', 'b'])->andReturn([
+        'a' => 'A-ser',
+        'b' => 'B-ser',
+    ]);
+
+    $this->settingsDeserializer->shouldReceive('deserialize')->with('A-ser')->andReturn('A');
+    $this->settingsDeserializer->shouldReceive('deserialize')->with('B-ser')->andReturn('B');
+
+    expect($this->toArray($this->manager->get(['a', 'b'])))->toEqual([
+        'a' => 'A',
+        'b' => 'B',
+    ]);
+    expect($this->manager->get('a'))->toEqual('A');
+    expect($this->manager->get('b'))->toEqual('B');
+});
+
+it('is dirty after setting a value', function () {
+    expect($this->manager->isDirty())->toBeFalse();
+
+    $this->manager->set('a', 'A');
+
+    expect($this->manager->isDirty())->toBeTrue();
+});
+
+it('is dirty after setting null', function () {
+    expect($this->manager->isDirty())->toBeFalse();
+
+    $this->manager->set('a', null);
+
+    expect($this->manager->isDirty())->toBeTrue();
+});
+
+it('is dirty after setting many values', function () {
+    expect($this->manager->isDirty())->toBeFalse();
+
+    $this->manager->set([
+        'a' => 'A',
+        'b' => null,
+    ]);
+
+    expect($this->manager->isDirty())->toBeTrue();
+});
+
+it('stays clean after setting an empty array', function () {
+    expect($this->manager->isDirty())->toBeFalse();
+
+    $this->manager->set([]);
+
+    expect($this->manager->isDirty())->toBeFalse();
+});
+
+it('is clean after a refresh', function () {
+    expect($this->manager->isDirty())->toBeFalse();
+    $this->manager->set('a', 'A');
+    expect($this->manager->isDirty())->toBeTrue();
+
+    $this->manager->refresh();
+
+    expect($this->manager->isDirty())->toBeFalse();
+});
+
+it('is clean after a save', function () {
+    $this->settingsSerializer->shouldReceive('serialize')->with('A')->andReturn('A-ser');
+    $this->settingsRepository->shouldReceive('setItem')->with('a', 'A-ser');
+
+    expect($this->manager->isDirty())->toBeFalse();
+    $this->manager->set('a', 'A');
+    expect($this->manager->isDirty())->toBeTrue();
+
+    $this->manager->save();
+
+    expect($this->manager->isDirty())->toBeFalse();
+});
