@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 `bonsaicms/settings` — a standalone Laravel package (not an application) providing a settings manager that can persist *any* PHP value, including Eloquent models and arbitrary objects. There is no `app/`, no `artisan`; the host application is simulated by `orchestra/testbench` in tests.
 
-Supports PHP `^7.3|^8.0.2` and Laravel `^8.0|^9.0|^10.0|^11.0` — keep changes compatible across that whole range (no PHP 8-only syntax, no APIs newer than Laravel 8).
+Supports PHP `^8.3` and Laravel `^12.0|^13.0` — keep changes compatible with both Laravel lines (nothing that only exists in 13). Support for Laravel 8–11 and PHP 7.3–8.2 was dropped, so the next release is a major.
 
 ## Commands
 
@@ -26,7 +26,7 @@ php vendor/bin/pest --filter "round trips primitives"
 
 `php` and `composer` come from Herd (`C:\Users\mspid\.config\herd\bin`) and are on PATH in PowerShell but **not** in the bundled bash shell — run test commands from PowerShell, prefixed with `php` (e.g. `php vendor/bin/pest`).
 
-`phpunit.xml` targets the PHPUnit 9 schema, so newer PHPUnit/Pest prints one "deprecated schema" WARN above an otherwise green run. Leave it — migrating would break the PHPUnit 9 that Pest 1 (the PHP 7.3 / Laravel 8 end of the support matrix) pulls in.
+Pest runs off [phpunit.xml](phpunit.xml), which is on the current PHPUnit schema.
 
 Only `tests/Unit` is registered as a test suite in [phpunit.xml](phpunit.xml). There is no lint/static-analysis tooling in this repo.
 

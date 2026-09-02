@@ -1,13 +1,17 @@
 # Introduction
 There are some "settings packages" for Laravel out there. For example [anlutro/laravel-settings](https://github.com/anlutro/laravel-settings) or [akaunting/setting](https://github.com/akaunting/setting) but we think we can do better.
 
-For example, this package is able to save **any value** in the settings (numbers, strings, booleans etc. but also any objects, for example [Eloquent](https://laravel.com/docs/8.x/eloquent) models).
+For example, this package is able to save **any value** in the settings (numbers, strings, booleans etc. but also any objects, for example [Eloquent](https://laravel.com/docs/eloquent) models).
 
 # How it works
 
 1. This package serialize the setting value (using the PHP's `serialize` and `base64_encode` functions).
 2. The value is stored it in a `text` database column type (if you use `DatabaseSettingsRepository`).
 3. When reading the setting value, the serialized value is decoded (via PHP `base64_decode` function) and then deserialized (via PHP `deserialize` function).
+
+# Requirements
+* PHP `8.3` or higher
+* Laravel `12.x` or `13.x`
 
 # Installation
 ```bash2
@@ -25,21 +29,23 @@ $ php artisan migrate
 ```
 
 ### Auto-load Middleware
-Add the following line inside your `app/Http/Kernel.php` file. This middleware will automatically call `Settings::all()` before each request so whenever you call `Settings::get()` there will be no DB query executed, because all settings will be already in the cache.
+Append the following middleware inside your `bootstrap/app.php` file. This middleware will automatically call `Settings::all()` before each request so whenever you call `Settings::get()` there will be no DB query executed, because all settings will be already in the cache.
 ```php
-protected $middleware = [
-    ...
-+   \BonsaiCms\Settings\Http\Middleware\LoadSettings::class,
-];
+->withMiddleware(function (Middleware $middleware) {
+    $middleware->append(
+        \BonsaiCms\Settings\Http\Middleware\LoadSettings::class,
+    );
+})
 ```
 
 ### Auto-save Middleware
-Add the following line inside your `app/Http/Kernel.php` file. This middleware will automatically call `Settings::save()` after each request so you won't need to manually call it.
+Append the following middleware inside your `bootstrap/app.php` file. This middleware will automatically call `Settings::save()` after each request so you won't need to manually call it.
 ```php
-protected $middleware = [
-    ...
-+   \BonsaiCms\Settings\Http\Middleware\SaveSettings::class,
-];
+->withMiddleware(function (Middleware $middleware) {
+    $middleware->append(
+        \BonsaiCms\Settings\Http\Middleware\SaveSettings::class,
+    );
+})
 ```
 
 # Usage
