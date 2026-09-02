@@ -278,7 +278,7 @@ Objects that do **not** implement the interface are still supported — they jus
 
 The get/set distinction for a single array argument is decided by its keys: sequential integer keys (`0, 1, 2, …`) mean *get these keys*, anything else means *set these pairs*.
 
-> The helper is `require_once`d from the service provider's `boot()` method, not from composer's `files` autoload — it does not exist until the provider has booted.
+> The helper is registered through composer's `files` autoload, so it exists before any service provider boots. It still resolves the manager out of the container at call time, so calling it before the provider has registered fails on the binding, not on the function.
 
 ## Middleware
 
@@ -381,10 +381,10 @@ src/BonsaiCms/Settings/
 ├── SettingsSerializer.php                  serialize() + base64_encode()
 ├── SettingsDeserializer.php                base64_decode() + unserialize()
 ├── SettingsFacade.php                      the Settings facade
-└── SettingsServiceProvider.php             config-driven bindings, publishing, helper, command
+└── SettingsServiceProvider.php             config-driven bindings, publishing, command
 config/settings.php                         implementations, database, throwExceptions
 database/migrations/                        publishable migration for the settings table
-helpers/helpers.php                         the settings() helper
+helpers/helpers.php                         the settings() helper, composer files autoload
 ```
 
 ## Gotchas

@@ -21,7 +21,10 @@
     "autoload": {
         "psr-4": {
             "BonsaiCms\\Settings\\": "src/BonsaiCms/Settings/"
-        }
+        },
+        "files": [
+            "helpers/helpers.php"
+        ]
     },
     "autoload-dev": {
         "psr-4": {

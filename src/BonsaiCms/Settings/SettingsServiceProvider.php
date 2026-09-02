@@ -33,8 +33,6 @@ class SettingsServiceProvider extends ServiceProvider
      */
     public function boot()
     {
-        require_once(__DIR__.'/../../../helpers/helpers.php');
-
         $this->publishes([
             __DIR__.'/../../../config/settings.php' => config_path('settings.php'),
         ], ['settings', 'settings-config']);

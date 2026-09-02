@@ -57,7 +57,7 @@ Serializer/deserializer failures are swallowed and return `null` unless `setting
 
 ### Registration details
 
-- `helpers/helpers.php` is *not* in composer's `files` autoload — it is `require_once`d from the provider's `boot()`. The `settings()` helper is therefore unavailable unless the provider booted.
+- `helpers/helpers.php` is in composer's `files` autoload, so `settings()` exists before any provider boots. It was `require_once`d from the provider's `boot()` until the Laravel 12/13 major, which made it order-dependent against other packages. Keep the `function_exists` guard: it is what stops a colliding `settings()` from another package from fataling.
 - The `settings()` helper overloads on argument shape: an array with sequential integer keys is a multi-get, an associative array is a multi-set. See [helpers/helpers.php](helpers/helpers.php).
 - `Models\Setting` resolves its connection and table from config at call time (`getConnectionName()`/`getTable()`), so config changes take effect without touching the model.
 - The migration is **not** registered with the application. It is published with `publishesMigrations()` under the `settings-migrations` tag (config under `settings-config`, both under `settings`), so the host app owns and can edit it. [tests/FeatureTestCase.php](tests/FeatureTestCase.php) therefore loads it itself in `defineDatabaseMigrations()` — feature tests get the table from there, not from the provider.
