@@ -37,9 +37,11 @@ class SettingsServiceProvider extends ServiceProvider
 
         $this->publishes([
             __DIR__.'/../../../config/settings.php' => config_path('settings.php'),
-        ], 'settings');
+        ], ['settings', 'settings-config']);
 
-        $this->loadMigrationsFrom(__DIR__.'/../../../database/migrations');
+        $this->publishesMigrations([
+            __DIR__.'/../../../database/migrations' => database_path('migrations'),
+        ], ['settings', 'settings-migrations']);
 
         if ($this->app->runningInConsole()) {
             $this->commands([

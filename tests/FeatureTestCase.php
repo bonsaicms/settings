@@ -29,6 +29,15 @@ abstract class FeatureTestCase extends TestCase
         ];
     }
 
+    /**
+     * The package does not register its migration with the application; it is
+     * published into the host app instead, so tests have to load it themselves.
+     */
+    protected function defineDatabaseMigrations()
+    {
+        $this->loadMigrationsFrom(__DIR__.'/../database/migrations');
+    }
+
     protected function defineEnvironment($app)
     {
         $app['config']->set('database.default', 'testing');

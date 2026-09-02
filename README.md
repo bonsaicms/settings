@@ -48,17 +48,29 @@ Settings::get('owner')->is($user);       // true — same model, re-fetched from
 composer require bonsaicms/settings
 ```
 
-The service provider and the `Settings` facade are auto-discovered. Run the migration that creates the settings table:
+The service provider and the `Settings` facade are auto-discovered. Publish the migration, then run it:
+
+```bash
+php artisan vendor:publish --tag=settings-migrations
+```
 
 ```bash
 php artisan migrate
 ```
 
+The migration is copied into your `database/migrations` with a fresh timestamp, so it belongs to your application — rename the table, change the column types or add an index before you run it. The package does **not** register it for you, so nothing is created behind your back. If you would rather not run every other pending migration in the application, point `migrate` at the published file (the publish command prints its full name, which starts with the timestamp it was stamped with):
+
+```bash
+php artisan migrate --path=database/migrations/YYYY_MM_DD_HHMMSS_bonsaicms_create_settings_table.php
+```
+
 Optionally publish the config file to `config/settings.php`:
 
 ```bash
-php artisan vendor:publish --tag=settings
+php artisan vendor:publish --tag=settings-config
 ```
+
+Use `--tag=settings` to publish both at once.
 
 That is enough to start using the package. The two [middleware](#middleware) below are optional but recommended for web applications.
 
@@ -294,7 +306,7 @@ Calls `Settings::deleteAll()`.
 
 ## Configuration
 
-`config/settings.php` (publish it with `--tag=settings`):
+`config/settings.php` (publish it with `--tag=settings-config`):
 
 ### Swapping implementations
 
@@ -369,9 +381,9 @@ src/BonsaiCms/Settings/
 ├── SettingsSerializer.php                  serialize() + base64_encode()
 ├── SettingsDeserializer.php                base64_decode() + unserialize()
 ├── SettingsFacade.php                      the Settings facade
-└── SettingsServiceProvider.php             config-driven bindings, migration, helper, command
+└── SettingsServiceProvider.php             config-driven bindings, publishing, helper, command
 config/settings.php                         implementations, database, throwExceptions
-database/migrations/                        creates the settings table
+database/migrations/                        publishable migration for the settings table
 helpers/helpers.php                         the settings() helper
 ```
 

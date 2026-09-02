@@ -60,7 +60,7 @@ Serializer/deserializer failures are swallowed and return `null` unless `setting
 - `helpers/helpers.php` is *not* in composer's `files` autoload — it is `require_once`d from the provider's `boot()`. The `settings()` helper is therefore unavailable unless the provider booted.
 - The `settings()` helper overloads on argument shape: an array with sequential integer keys is a multi-get, an associative array is a multi-set. See [helpers/helpers.php](helpers/helpers.php).
 - `Models\Setting` resolves its connection and table from config at call time (`getConnectionName()`/`getTable()`), so config changes take effect without touching the model.
-- The migration is loaded automatically via `loadMigrationsFrom`; the config file is published under the `settings` tag.
+- The migration is **not** registered with the application. It is published with `publishesMigrations()` under the `settings-migrations` tag (config under `settings-config`, both under `settings`), so the host app owns and can edit it. [tests/FeatureTestCase.php](tests/FeatureTestCase.php) therefore loads it itself in `defineDatabaseMigrations()` — feature tests get the table from there, not from the provider.
 
 ## Tests
 
