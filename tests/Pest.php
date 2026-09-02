@@ -1,8 +1,12 @@
 <?php
 
 use Tests\TestCase;
+use Tests\FeatureTestCase;
 
 uses(TestCase::class)->in('Unit');
+
+// Feature tests boot the package inside a real app with a sqlite database
+uses(FeatureTestCase::class)->in('Feature');
 
 /*
 |--------------------------------------------------------------------------

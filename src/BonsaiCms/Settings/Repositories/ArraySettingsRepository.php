@@ -16,12 +16,19 @@ class ArraySettingsRepository implements SettingsRepository
 
     public function setItem(string $key, $value) : void
     {
-        $this->storage[$key] = $value;
+        // A null value means "absent", exactly like in DatabaseSettingsRepository
+        if ($value === null) {
+            $this->storage->forget($key);
+        } else {
+            $this->storage[$key] = $value;
+        }
     }
 
     public function setItems(array $items) : void
     {
-        $this->storage = $this->storage->merge(new Collection($items));
+        foreach ($items as $key => $value) {
+            $this->setItem($key, $value);
+        }
     }
 
     public function getItem(string $key)
@@ -38,7 +45,7 @@ class ArraySettingsRepository implements SettingsRepository
 
     public function getAll() : array
     {
-        return $this->storage->pluck('value', 'key')->toArray();
+        return $this->storage->toArray();
     }
 
     public function deleteAll() : void

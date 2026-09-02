@@ -68,7 +68,7 @@ class DatabaseSettingsRepository implements SettingsRepository
     public function getItems(array $keys): array
     {
         $items = $this->model::whereIn('key', $keys)->get()->mapWithKeys(function ($item) {
-            return [$item->key => $item];
+            return [$item->key => $item->value];
         });
 
         return (new Collection($keys))->mapWithKeys(function ($key) use ($items) {
@@ -83,6 +83,12 @@ class DatabaseSettingsRepository implements SettingsRepository
 
     public function deleteAll() : void
     {
-        $this->model::truncate();
+        /*
+         * Deliberately not truncate(): on SQLite it also touches the
+         * "sqlite_sequence" table, which does not exist until some table in
+         * the database declares an AUTOINCREMENT column. Our settings table
+         * never does.
+         */
+        $this->model::query()->delete();
     }
 }

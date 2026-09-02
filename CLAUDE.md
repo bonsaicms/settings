@@ -26,9 +26,7 @@ php vendor/bin/pest --filter "round trips primitives"
 
 `php` and `composer` come from Herd (`C:\Users\mspid\.config\herd\bin`) and are on PATH in PowerShell but **not** in the bundled bash shell — run test commands from PowerShell, prefixed with `php` (e.g. `php vendor/bin/pest`).
 
-Pest runs off [phpunit.xml](phpunit.xml), which is on the current PHPUnit schema.
-
-Only `tests/Unit` is registered as a test suite in [phpunit.xml](phpunit.xml). There is no lint/static-analysis tooling in this repo.
+Run one suite with `php vendor/bin/pest --testsuite Unit` (or `Feature`); both are registered in [phpunit.xml](phpunit.xml), which is on the current PHPUnit schema. There is no lint or static-analysis tooling in this repo.
 
 ## Architecture
 
@@ -47,7 +45,9 @@ Four contracts in `src/BonsaiCms/Settings/Contracts/` are the seams; every imple
 
 Values are held **deserialized** in the cache and serialized only in `save()`, which writes the *entire* cache back (single `setItem` when one entry, `setItems`/upsert otherwise). Nothing is persisted until `save()` runs.
 
-`null` is the "absent" sentinel throughout: `has()` is `get() !== null`, serializers short-circuit on null, and `DatabaseSettingsRepository` **deletes** rows whose value is null rather than storing them. Keep that invariant when touching any of these.
+`null` is the "absent" sentinel throughout: `has()` is `get() !== null`, serializers short-circuit on null, and both repositories **drop** entries whose value is null rather than storing them. Keep that invariant when touching any of these.
+
+Every repository method returns the raw serialized **string**, never a `Setting` model — the manager pipes whatever comes back straight into `deserialize()`.
 
 ### Serialization of objects
 
@@ -64,8 +64,11 @@ Serializer/deserializer failures are swallowed and return `null` unless `setting
 
 ## Tests
 
-Tests are written in **Pest**. [tests/Pest.php](tests/Pest.php) binds `Tests\TestCase` to everything under `tests/Unit` via `uses(...)->in('Unit')` and declares the shared `primitives` / `objects` datasets — each dataset entry is an *argument list*, so an array value needs one extra level of wrapping, and object values are closures so every test gets a fresh instance.
+Tests are written in **Pest**, in two suites bound to different base classes by [tests/Pest.php](tests/Pest.php):
 
-`Tests\TestCase` extends Testbench but does **not** register `SettingsServiceProvider` and does not use a database. Manager tests construct `SettingsManager` directly with Mockery mocks of the three collaborators (built in `beforeEach`, exposed as `$this->manager` etc.) and assert on the exact repository calls — so a change to *when* the manager calls the repository will break `ManagerTest` even if behaviour is externally identical. That is intentional; update the expectations deliberately.
+- **`tests/Unit`** → `Tests\TestCase`, which extends Testbench but does **not** register `SettingsServiceProvider` and has no database. `ManagerTest` builds `SettingsManager` directly with Mockery mocks of the three collaborators (in `beforeEach`, exposed as `$this->manager` etc.) and asserts on the exact repository calls — so a change to *when* the manager calls the repository breaks it even if behaviour is externally identical. That is intentional; update the expectations deliberately.
+- **`tests/Feature`** → `Tests\FeatureTestCase`, which registers the provider and the facade alias and runs against sqlite `:memory:` with `RefreshDatabase`. **Anything about repositories, the migration, or the manager's persistence belongs here** — the mocked unit tests cannot see a repository returning the wrong shape, which is precisely how `getItems()` shipped broken.
+
+`SettingsRepositoryTest` runs the whole `SettingsRepository` contract against *both* implementations through the `repositories` dataset, so the array and database repositories cannot drift apart. Dataset entries are *argument lists* — an array value needs one extra level of wrapping, and object/repository values are closures so every test gets a fresh instance.
 
 Serializer tests assert round-trips through `SettingsDeserializer`, not against fixed strings, so the on-disk format may change — but doing so breaks existing stored settings in the wild.

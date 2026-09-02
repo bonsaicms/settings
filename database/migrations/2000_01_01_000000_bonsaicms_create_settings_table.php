@@ -11,7 +11,7 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::create(config('settings.database.table'), function (Blueprint $table) {
+        $this->schema()->create(config('settings.database.table'), function (Blueprint $table) {
             $table->string('key')->unique();
             $table->text('value');
             $table->timestamps();
@@ -25,6 +25,17 @@ return new class extends Migration
      */
     public function down(): void
     {
-        Schema::dropIfExists(config('settings.database.table'));
+        $this->schema()->dropIfExists(config('settings.database.table'));
+    }
+
+    /**
+     * The settings model may live on its own connection, so the table has to
+     * be created there and not on the application's default connection.
+     */
+    protected function schema()
+    {
+        return Schema::connection(
+            config('settings.database.connection')
+        );
     }
 };
