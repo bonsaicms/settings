@@ -160,7 +160,16 @@ class SettingsManager implements Contracts\SettingsManager
             $this->loadedAll = true;
         }
 
-        return $this->cache;
+        /*
+         * A read of a key that does not exist leaves a null behind in the
+         * cache, so the next read of it does not have to ask the repository
+         * again. That negative cache is an implementation detail: null means
+         * "absent" everywhere else in the package, so a key holding one is not
+         * a setting and has no business showing up here.
+         */
+        return $this->cache->filter(function ($value) {
+            return $value !== null;
+        });
     }
 
     protected function shouldSerialize($value)
@@ -206,11 +215,20 @@ class SettingsManager implements Contracts\SettingsManager
             );
         }
 
+        // Remember the misses too, so reading them again stays query free
         $keys->diff($this->getCachedKeys())->each(function ($key) {
             $this->cache[$key] = null;
         });
 
-        return $this->cache->only($keys);
+        /*
+         * Keyed off the requested keys and not off the cache, so the result
+         * comes back in the order it was asked for however much of it was
+         * already in memory - the same guarantee every repository gives for
+         * getItems().
+         */
+        return $keys->mapWithKeys(function ($key) {
+            return [$key => $this->cache->get($key)];
+        });
     }
 
     public function save() : void

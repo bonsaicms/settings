@@ -2,10 +2,8 @@
 
 namespace BonsaiCms\Settings;
 
-use Exception;
-use Illuminate\Support\Facades\DB;
+use Throwable;
 use Illuminate\Support\Facades\Config;
-use Illuminate\Database\PostgresConnection;
 use BonsaiCms\Settings\Exceptions\SerializeException;
 use BonsaiCms\Settings\Contracts\SerializationWrappable;
 use BonsaiCms\Settings\Contracts\SettingsSerializer as SettingsSerializerContract;
@@ -28,9 +26,12 @@ class SettingsSerializer implements SettingsSerializerContract
             $value = base64_encode($value);
 
             return $value;
-        } catch (Exception $e) {
+        } catch (Throwable $e) {
+            // Throwable for the same reason as in SettingsDeserializer
             if (Config::get('settings.throwExceptions.serialize')) {
-                throw new SerializeException($e);
+                throw ($e instanceof SerializeException)
+                    ? $e
+                    : new SerializeException($e->getMessage(), 0, $e);
             }
 
             return null;

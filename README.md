@@ -133,7 +133,7 @@ Every method is available on the `Settings` facade, on `settings()`, and on the 
 | `set(string $key, mixed $value): void` | Write one setting into the cache. `null` deletes. |
 | `set(array $pairs): void` | Write many settings at once (`['a' => 1, 'b' => 2]`). |
 | `get(string $key): mixed` | Read one setting, or `null` if it does not exist. |
-| `get(array $keys): Collection` | Read many; the result always contains **every** requested key, missing ones as `null`. |
+| `get(array $keys): Collection` | Read many; the result always contains **every** requested key, in the order asked for, missing ones as `null`. |
 | `has(string $key): bool` | `get($key) !== null`. |
 | `all(): Collection` | Every setting, keyed by name. Loads the full set from the repository once, then serves from memory. |
 | `save(): void` | Persist the whole cache to the repository. |
@@ -470,7 +470,7 @@ Behaviours that are easy to get wrong — worth reading whether you are writing 
 3. **You cannot store `null`.** Setting a key to `null` deletes it; reading a missing key gives `null`. Use a sentinel of your own if you need to distinguish "absent" from "explicitly empty".
 4. **`refresh()` throws away unsaved changes.** It resets the cache and clears the dirty flag.
 5. **`save()` writes the whole cache**, so after `all()` + `save()` every row is rewritten (and its `updated_at` bumped), not just the ones you changed.
-6. **`get(array $keys)` never omits keys.** Missing ones come back as `null`, so the result count always matches the request.
+6. **`get(array $keys)` never omits keys.** Missing ones come back as `null`, so the result count always matches the request, and the order matches too.
 7. **Serialization errors are silent in production.** With `APP_DEBUG=false` a failed serialize/deserialize yields `null` rather than an exception — see [Exceptions](#exceptions).
 8. **The stored format is PHP-specific.** `serialize()` output is not readable by other languages, and changing the serializer breaks settings already stored in the wild.
 9. **The manager is a singleton**, so its cache is shared for the whole request/process lifetime — including long-running workers (Octane, queue workers), where you may want `refresh()` between jobs.

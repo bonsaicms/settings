@@ -111,6 +111,15 @@ abstract class FeatureTestCase extends TestCase
      * turns the skip into a failure - a silently skipped job would defeat the
      * point of having a Redis service in the matrix.
      */
+    /**
+     * Whether there is a Redis to talk to, for a test that covers more than
+     * Redis and only wants to leave that one driver out.
+     */
+    public static function redisIsAvailable(): bool
+    {
+        return static::redisIsReachable();
+    }
+
     public static function requireRedis(): void
     {
         if (static::redisIsReachable()) {

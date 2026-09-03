@@ -64,10 +64,47 @@ it('stores the settings as readable json', function () {
         'b' => 'B-ser',
     ]);
 
-    expect(json_decode($this->files->get($this->path), true))->toEqual([
+    $contents = $this->files->get($this->path);
+
+    expect(json_decode($contents, true))->toEqual([
         'a' => 'A-ser',
         'b' => 'B-ser',
     ]);
+
+    /*
+     * Pretty printed and with slashes and unicode left alone, because the
+     * point of this driver is a file an operator can open and read - an
+     * installer's settings, or a maintenance switch.
+     */
+    expect($contents)->toContain("\n");
+    expect($contents)->toContain('"a"');
+});
+
+it('is the whole state, as another process would find it', function () {
+    /*
+     * The repository holds nothing in memory: a second instance over the same
+     * path - a queue worker, the next request - sees exactly what was written.
+     */
+    $this->repository->setItems(['a' => 'A-ser', 'b' => 'B-ser']);
+
+    $other = new FileSettingsRepository(new Filesystem, ['path' => $this->path]);
+
+    expect($other->getAll())->toEqual(['a' => 'A-ser', 'b' => 'B-ser']);
+
+    $other->setItem('a', null);
+
+    expect($this->repository->getAll())->toEqual(['b' => 'B-ser']);
+});
+
+it('keeps the file valid after deleting one of several settings', function () {
+    $this->repository->setItems([
+        'a' => 'A-ser',
+        'b' => 'B-ser',
+    ]);
+
+    $this->repository->setItems(['a' => null]);
+
+    expect(json_decode($this->files->get($this->path), true))->toEqual(['b' => 'B-ser']);
 });
 
 it('reads as empty when the file holds nothing', function () {

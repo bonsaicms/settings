@@ -63,7 +63,9 @@ Only the `database` driver needs the migration; `settings.migrations.driver` nam
 
 Values are held **deserialized** in the cache and serialized only in `save()`, which writes the *entire* cache back (single `setItem` when one entry, `setItems`/upsert otherwise). Nothing is persisted until `save()` runs.
 
-`null` is the "absent" sentinel throughout: `has()` is `get() !== null`, serializers short-circuit on null, and *every* repository **drops** entries whose value is null rather than storing them — a deleted row, an `HDEL`, a key removed from the JSON. Keep that invariant when touching any of these; a driver that stores a null would make `has()` report a missing setting as present.
+`null` is the "absent" sentinel throughout: `has()` is `get() !== null`, serializers short-circuit on null, and *every* repository **drops** entries whose value is null rather than storing them — a deleted row, an `HDEL`, a key removed from the JSON. Keep that invariant when touching any of these; a driver that stores a null would make `has()` report a missing setting as present. It cuts both ways: `getOne`/`getMany` cache a null for a key that turned out not to exist (so reading it again is query-free), and `all()` therefore has to **filter those out** — the negative cache is an implementation detail, not a setting.
+
+`getMany` keys its result off the *requested* keys, so the order matches the request whatever part of the answer came from the cache — the same guarantee every repository gives for `getItems()`.
 
 Every repository method returns the raw serialized **string**, never a `Setting` model — the manager pipes whatever comes back straight into `deserialize()`.
 
@@ -71,7 +73,9 @@ Every repository method returns the raw serialized **string**, never a `Setting`
 
 `serialize()` + `base64_encode()` into a `text` column. Objects implementing `Contracts\SerializationWrappable` are first wrapped in [SerializationWrapper](src/BonsaiCms/Settings/SerializationWrapper.php), which stores only the class name (`$c`) and a primitive payload (`$d`) — deliberately one-letter properties to keep the serialized string short. `unwrap()` calls the class's static `unwrapAfterSerialization()`. `Models\SerializableModelTrait` implements this for Eloquent by storing just the primary key and re-`find()`ing on read, so **model attributes are never serialized**.
 
-Serializer/deserializer failures are swallowed and return `null` unless `settings.throwExceptions.*` is on (defaults to `env('APP_DEBUG')`).
+Serializer/deserializer failures are swallowed and return `null` unless `settings.throwExceptions.*` is on (defaults to `env('APP_DEBUG')`). Both catch `Throwable`, not `Exception` — unwrapping a value whose class has since been renamed raises an `Error`, and one unreadable setting must not take the application down.
+
+`unserialize()` reports a damaged string with a **warning**, not an exception, and answers `false` for a stored `false` and for garbage alike. `SettingsDeserializer::unserialize()` therefore installs its own error handler for the call and compares against `serialize(false)`: without that, the answer would depend on the host application's error handler, and a corrupted entry would come back as `false` — which is not null, so `has()` would call it present.
 
 ### Registration details
 
@@ -89,7 +93,21 @@ Tests are written in **Pest**, in two suites bound to different base classes by 
 
 `SettingsRepositoryTest` runs the whole `SettingsRepository` contract against *every* implementation through the `repositories` dataset, so the drivers cannot drift apart. Dataset entries are *argument lists* — an array value needs one extra level of wrapping, and object/repository values are closures so every test gets a fresh instance. Redis and file keep their contents outside the PHP process, so unlike the database they are **not** rolled back between tests: the dataset closures empty them on the way in, and `FeatureTestCase::setUp()` empties the default driver.
 
-Beyond that dataset, `SettingsRepositoryFactoryTest` covers driver resolution and the `env()` wiring of the config file (by re-`require`ing it with the environment swapped), and `FileSettingsRepositoryTest`/`RedisSettingsRepositoryTest` cover only what is specific to those drivers.
+A new expectation about a repository belongs in that dataset unless **only one driver can get it wrong**; each driver's own file — `DatabaseSettingsRepositoryTest`, `FileSettingsRepositoryTest`, `RedisSettingsRepositoryTest` — holds only that. They resolve their driver by name rather than through `settings.default`, so they run whatever `SETTINGS_DRIVER` the suite is pointed at.
+
+The rest of `tests/Feature`:
+
+| file | covers |
+|---|---|
+| `SettingsTest` | the package end to end through whatever driver is selected — **must stay driver agnostic** |
+| `SettingsRepositoryFactoryTest` | driver resolution, and the `env()` wiring of the config file (by re-`require`ing it with the environment swapped) |
+| `ServiceProviderTest` | the container bindings, the singletons, and swapping an implementation through the config |
+| `MiddlewareTest` | `LoadSettings` / `SaveSettings` over real routes; "no more queries" is asserted by taking the repository away, not by counting SQL, so it holds for every driver |
+| `DeleteAllSettingsCommandTest` | `settings:delete-all`, with and without `--driver` |
+| `MigrationTest` | the published migration's `up()`/`down()` and its `settings.migrations.driver` wiring |
+| `PublishingTest` | the publish tags, and that `vendor:publish` really writes the files |
+
+In `tests/Unit`, `HelperTest` covers the `settings()` overload against a mocked manager, and `SerializerTest`/`DeserializerTest`/`SerializationWrappableTest` cover the value ⇄ string layer including its failure paths.
 
 ### Running the suite against a driver
 
@@ -104,4 +122,4 @@ Everything in `tests/Feature` is **driver agnostic** — keep it that way, and p
 
 Without a Redis running, the Redis tests **skip** so `composer test` still works on a bare machine. CI sets `SETTINGS_REQUIRE_REDIS=1` precisely so that skip cannot hide a broken driver. [.github/workflows/tests.yml](.github/workflows/tests.yml) has three jobs: `versions` (each PHP × Laravel on sqlite), `drivers` (whole suite once per `SETTINGS_DRIVER`, plus Redis on both clients) and `databases` (the database driver against real PostgreSQL, MariaDB and MySQL, because the upsert SQL is not the same on every engine and sqlite would never show it).
 
-Serializer tests assert round-trips through `SettingsDeserializer`, not against fixed strings, so the on-disk format may change — but doing so breaks existing stored settings in the wild.
+Most serializer tests assert round-trips through `SettingsDeserializer` rather than against fixed strings. Two do not, deliberately: `SerializerTest`'s "stores a value as base64 encoded php serialization" and `DeserializerTest`'s "reads back a value stored by an earlier version of the package" hold literal strings, because a round-trip keeps passing when the format changes on both sides at once — and changing it makes every setting already stored in the wild unreadable. Editing those literals is a deliberate act that needs a migration path, not a detail of some refactor.

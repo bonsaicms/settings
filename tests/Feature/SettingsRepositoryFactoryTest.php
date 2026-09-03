@@ -28,11 +28,51 @@ it('resolves every driver shipped with the package', function (string $name, str
     'redis' => ['redis', RedisSettingsRepository::class],
 ]);
 
+it('resolves every driver the shipped config declares', function () {
+    /*
+     * The hard coded list above says which class each driver must be; this one
+     * says none of them may be forgotten. A driver added to the config file
+     * without an entry in "driver_implementations" - or with a typo in it -
+     * fails here rather than the first time an application selects it.
+     */
+    foreach (array_keys(config('settings.drivers')) as $name) {
+        if ($name === 'redis' && ! FeatureTestCase::redisIsAvailable()) {
+            continue;
+        }
+
+        expect(factory()->driver($name))
+            ->toBeInstanceOf(SettingsRepository::class)
+            ->and(config('settings.drivers.'.$name.'.driver'))
+            ->toBeIn(array_keys(config('settings.driver_implementations')));
+    }
+});
+
 it('resolves the driver named by the default config when none is asked for', function () {
     config()->set('settings.default', 'array');
 
     expect(factory()->driver())->toBeInstanceOf(ArraySettingsRepository::class);
 });
+
+it('treats the default driver asked for by name as the same driver', function () {
+    config()->set('settings.default', 'array');
+
+    expect(factory()->driver())->toBe(factory()->driver('array'));
+});
+
+it('falls back to the database driver when the config names no default', function ($default) {
+    /*
+     * An application that publishes the config file and writes
+     * env('SETTINGS_DRIVER') without a fallback of its own ends up here, and
+     * so does one whose .env has the variable but leaves it empty.
+     */
+    config()->set('settings.default', $default);
+
+    expect(factory()->getDefaultDriver())->toBe('database');
+    expect(factory()->driver())->toBeInstanceOf(DatabaseSettingsRepository::class);
+})->with([
+    'null' => [null],
+    'an empty string' => [''],
+]);
 
 it('binds the repository contract to the default driver', function () {
     config()->set('settings.default', 'array');

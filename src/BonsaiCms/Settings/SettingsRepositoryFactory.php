@@ -47,7 +47,13 @@ class SettingsRepositoryFactory implements Contracts\SettingsRepositoryFactory
      */
     public function getDefaultDriver() : string
     {
-        return $this->config->get('settings.default', 'database');
+        /*
+         * Not the second argument of get(): that one only applies to a key
+         * that is absent, and "settings.default" never is - the provider
+         * merges the config file, whose value is an env() call that answers
+         * null as readily as a driver name.
+         */
+        return $this->config->get('settings.default') ?: 'database';
     }
 
     /**
