@@ -11,12 +11,10 @@ return new class extends Migration
      */
     public function up(): void
     {
-        $this->schema()->create(config('settings.database.table'), function (Blueprint $table) {
-            $table->string('key')->unique();
+        $this->schema()->create($this->table(), function (Blueprint $table) {
+            $table->string('key')->primary();
             $table->text('value');
             $table->timestamps();
-
-            $table->primary('key');
         });
     }
 
@@ -25,17 +23,31 @@ return new class extends Migration
      */
     public function down(): void
     {
-        $this->schema()->dropIfExists(config('settings.database.table'));
+        $this->schema()->dropIfExists($this->table());
     }
 
     /**
-     * The settings model may live on its own connection, so the table has to
+     * The settings driver may live on its own connection, so the table has to
      * be created there and not on the application's default connection.
      */
     protected function schema()
     {
-        return Schema::connection(
-            config('settings.database.connection')
-        );
+        return Schema::connection($this->driver()['connection'] ?? null);
+    }
+
+    protected function table(): string
+    {
+        return $this->driver()['table'] ?? 'bonsaicms_settings';
+    }
+
+    /**
+     * The database driver this migration belongs to, named by
+     * "settings.migrations.driver".
+     */
+    protected function driver(): array
+    {
+        $name = config('settings.migrations.driver', 'database');
+
+        return config("settings.drivers.{$name}") ?? [];
     }
 };

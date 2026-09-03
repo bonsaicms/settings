@@ -21,7 +21,17 @@ class SettingsServiceProvider extends ServiceProvider
 
         $this->app->bind(Contracts\SettingsSerializer::class, $implementations[Contracts\SettingsSerializer::class]);
         $this->app->bind(Contracts\SettingsDeserializer::class, $implementations[Contracts\SettingsDeserializer::class]);
-        $this->app->bind(Contracts\SettingsRepository::class, $implementations[Contracts\SettingsRepository::class]);
+
+        $this->app->singleton(Contracts\SettingsRepositoryFactory::class, $implementations[Contracts\SettingsRepositoryFactory::class]);
+
+        /*
+         * The repository is whichever driver "settings.default" names. Asking
+         * the factory keeps the driver a runtime decision, so SETTINGS_DRIVER
+         * (or a config change in a test) is enough to swap the backend.
+         */
+        $this->app->bind(Contracts\SettingsRepository::class, function ($app) {
+            return $app->make(Contracts\SettingsRepositoryFactory::class)->driver();
+        });
 
         $this->app->singleton(Contracts\SettingsManager::class, $implementations[Contracts\SettingsManager::class]);
     }

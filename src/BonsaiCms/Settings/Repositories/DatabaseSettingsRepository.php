@@ -2,25 +2,37 @@
 
 namespace BonsaiCms\Settings\Repositories;
 
-use Illuminate\Support\Facades\DB;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Collection;
 use BonsaiCms\Settings\Contracts\SettingsRepository;
+use BonsaiCms\Settings\Models\Setting;
 
 class DatabaseSettingsRepository implements SettingsRepository
 {
     protected $model;
 
-    public function __construct()
+    protected $connection;
+
+    protected $table;
+
+    /**
+     * The connection and table come from the driver configuration rather than
+     * from the model, so two database drivers can point at two different
+     * tables without needing two model classes.
+     */
+    public function __construct(array $config = [])
     {
-        $this->model = config('settings.database.model');
+        $this->model = $config['model'] ?? Setting::class;
+        $this->connection = $config['connection'] ?? null;
+        $this->table = $config['table'] ?? null;
     }
 
     public function setItem(string $key, $value): void
     {
         if ($value === null) {
-            $this->model::whereKey($key)->delete();
+            $this->query()->whereKey($key)->delete();
         } else {
-            $this->model::updateOrCreate(
+            $this->query()->updateOrCreate(
                 [
                     'key' => $key,
                 ],
@@ -34,31 +46,35 @@ class DatabaseSettingsRepository implements SettingsRepository
 
     public function setItems(array $items): void
     {
-        DB::transaction(function () use ($items) {
+        $this->newModel()->getConnection()->transaction(function () use ($items) {
             list($itemsToDelete, $itemsToUpsert) = (new Collection($items))
                 ->partition(function ($value, $key) {
                     return ($value === null);
                 });
 
             // Delete items with null value
-            $this->model::whereIn('key', $itemsToDelete->keys()->toArray())->delete();
+            if ($itemsToDelete->isNotEmpty()) {
+                $this->query()->whereIn('key', $itemsToDelete->keys()->toArray())->delete();
+            }
 
             // Upsert items with non-null values
-            $this->model::upsert(
-                $itemsToUpsert->map(function ($value, $key) {
-                    return [
-                        'key' => $key,
-                        'value' => $value,
-                    ];
-                })->values()->toArray(),
-                'key'
-            );
+            if ($itemsToUpsert->isNotEmpty()) {
+                $this->query()->upsert(
+                    $itemsToUpsert->map(function ($value, $key) {
+                        return [
+                            'key' => $key,
+                            'value' => $value,
+                        ];
+                    })->values()->toArray(),
+                    'key'
+                );
+            }
         });
     }
 
     public function getItem(string $key)
     {
-        $item = $this->model::find($key);
+        $item = $this->query()->find($key);
 
         return $item
             ? $item->value
@@ -67,7 +83,11 @@ class DatabaseSettingsRepository implements SettingsRepository
 
     public function getItems(array $keys): array
     {
-        $items = $this->model::whereIn('key', $keys)->get()->mapWithKeys(function ($item) {
+        if ($keys === []) {
+            return [];
+        }
+
+        $items = $this->query()->whereIn('key', $keys)->get()->mapWithKeys(function ($item) {
             return [$item->key => $item->value];
         });
 
@@ -78,7 +98,7 @@ class DatabaseSettingsRepository implements SettingsRepository
 
     public function getAll(): array
     {
-        return $this->model::pluck('value', 'key')->toArray();
+        return $this->query()->pluck('value', 'key')->toArray();
     }
 
     public function deleteAll() : void
@@ -89,6 +109,29 @@ class DatabaseSettingsRepository implements SettingsRepository
          * the database declares an AUTOINCREMENT column. Our settings table
          * never does.
          */
-        $this->model::query()->delete();
+        $this->query()->delete();
+    }
+
+    /**
+     * A fresh model bound to this driver's connection and table.
+     */
+    protected function newModel() : Model
+    {
+        $model = new $this->model;
+
+        if ($this->connection !== null) {
+            $model->setConnection($this->connection);
+        }
+
+        if ($this->table !== null) {
+            $model->setTable($this->table);
+        }
+
+        return $model;
+    }
+
+    protected function query()
+    {
+        return $this->newModel()->newQuery();
     }
 }

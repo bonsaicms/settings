@@ -9,7 +9,11 @@ class ArraySettingsRepository implements SettingsRepository
 {
     protected $storage;
 
-    public function __construct()
+    /**
+     * The array driver has nothing to configure; the argument is accepted so
+     * every repository can be built the same way by the factory.
+     */
+    public function __construct(array $config = [])
     {
         $this->storage = new Collection;
     }

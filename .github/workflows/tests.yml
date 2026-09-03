@@ -2,10 +2,29 @@ name: tests
 
 on: push
 
+env:
+    # Every job gets a Redis, so the "redis" entries of the repository dataset
+    # really run instead of quietly skipping themselves.
+    REDIS_HOST: 127.0.0.1
+    REDIS_PORT: 6379
+    SETTINGS_REQUIRE_REDIS: 1
+
 jobs:
-    test:
+    # Version coverage: every supported PHP and Laravel, on sqlite.
+    versions:
         name: PHP ${{ matrix.php }} / Laravel ${{ matrix.laravel }}
         runs-on: ubuntu-latest
+
+        services:
+            redis:
+                image: redis:7
+                ports:
+                    - 6379:6379
+                options: >-
+                    --health-cmd "redis-cli ping"
+                    --health-interval 10s
+                    --health-timeout 5s
+                    --health-retries 5
 
         strategy:
             fail-fast: false
@@ -20,7 +39,7 @@ jobs:
 
         steps:
             - name: Checkout
-              uses: actions/checkout@v7
+              uses: actions/checkout@v5
 
             - name: Setup PHP
               uses: shivammathur/setup-php@v2
@@ -34,7 +53,7 @@ jobs:
               run: echo "dir=$(composer config cache-files-dir)" >> "$GITHUB_OUTPUT"
 
             - name: Cache composer packages
-              uses: actions/cache@v5
+              uses: actions/cache@v4
               with:
                   path: ${{ steps.composer-cache.outputs.dir }}
                   key: composer-${{ runner.os }}-php${{ matrix.php }}-laravel${{ matrix.laravel }}-${{ hashFiles('composer.json') }}
@@ -46,6 +65,191 @@ jobs:
                   --with-all-dependencies
                   --with="laravel/framework:${{ matrix.laravel }}.*"
                   --with="orchestra/testbench:${{ matrix.testbench }}"
+
+            - name: Run tests
+              run: composer test
+
+    # Driver coverage: the whole suite, pointed at one driver at a time.
+    # tests/Feature is driver agnostic, so each of these really exercises the
+    # manager, the helper and the middleware against that backend - not just
+    # the repository contract.
+    drivers:
+        name: ${{ matrix.driver }} driver${{ matrix.label }}
+        runs-on: ubuntu-latest
+
+        services:
+            redis:
+                image: redis:7
+                ports:
+                    - 6379:6379
+                options: >-
+                    --health-cmd "redis-cli ping"
+                    --health-interval 10s
+                    --health-timeout 5s
+                    --health-retries 5
+
+        strategy:
+            fail-fast: false
+            matrix:
+                include:
+                    - driver: database
+                      redis_client: predis
+                      label: ''
+                    - driver: array
+                      redis_client: predis
+                      label: ''
+                    - driver: file
+                      redis_client: predis
+                      label: ''
+                    - driver: redis
+                      redis_client: predis
+                      label: ' (predis)'
+                    # phpredis and predis disagree on what HMGET returns and on
+                    # how a missing field is reported, so both are worth a run.
+                    - driver: redis
+                      redis_client: phpredis
+                      label: ' (phpredis)'
+
+        steps:
+            - name: Checkout
+              uses: actions/checkout@v5
+
+            - name: Setup PHP
+              uses: shivammathur/setup-php@v2
+              with:
+                  php-version: '8.4'
+                  extensions: mbstring, pdo, pdo_sqlite, sqlite3, redis
+                  coverage: none
+
+            - name: Locate composer cache
+              id: composer-cache
+              run: echo "dir=$(composer config cache-files-dir)" >> "$GITHUB_OUTPUT"
+
+            - name: Cache composer packages
+              uses: actions/cache@v4
+              with:
+                  path: ${{ steps.composer-cache.outputs.dir }}
+                  key: composer-${{ runner.os }}-php8.4-drivers-${{ hashFiles('composer.json') }}
+                  restore-keys: composer-${{ runner.os }}-php8.4-drivers-
+
+            - name: Install dependencies
+              run: composer update --prefer-dist --no-interaction --no-progress
+
+            - name: Run tests
+              run: composer test
+              env:
+                  SETTINGS_DRIVER: ${{ matrix.driver }}
+                  REDIS_CLIENT: ${{ matrix.redis_client }}
+
+    # Engine coverage: the database driver against a real server, because the
+    # SQL Eloquent generates for it - the upsert above all - is not the same on
+    # every engine, and sqlite would never show the difference.
+    databases:
+        name: ${{ matrix.name }}
+        runs-on: ubuntu-latest
+
+        services:
+            redis:
+                image: redis:7
+                ports:
+                    - 6379:6379
+                options: >-
+                    --health-cmd "redis-cli ping"
+                    --health-interval 10s
+                    --health-timeout 5s
+                    --health-retries 5
+
+            database:
+                image: ${{ matrix.image }}
+                ports:
+                    - ${{ matrix.port }}:${{ matrix.port }}
+                # Each image reads the variables it knows and ignores the rest,
+                # which keeps one service definition working for all of them.
+                env:
+                    POSTGRES_DB: settings_test
+                    POSTGRES_USER: postgres
+                    POSTGRES_PASSWORD: password
+                    MARIADB_DATABASE: settings_test
+                    MARIADB_ROOT_PASSWORD: password
+                    MYSQL_DATABASE: settings_test
+                    MYSQL_ROOT_PASSWORD: password
+
+        strategy:
+            fail-fast: false
+            matrix:
+                include:
+                    - name: PostgreSQL
+                      image: postgres:17
+                      db_driver: pgsql
+                      port: 5432
+                      username: postgres
+                    - name: MariaDB
+                      image: mariadb:11
+                      db_driver: mariadb
+                      port: 3306
+                      username: root
+                    - name: MySQL
+                      image: mysql:8
+                      db_driver: mysql
+                      port: 3306
+                      username: root
+
+        env:
+            DB_DRIVER: ${{ matrix.db_driver }}
+            DB_HOST: 127.0.0.1
+            DB_PORT: ${{ matrix.port }}
+            DB_DATABASE: settings_test
+            DB_USERNAME: ${{ matrix.username }}
+            DB_PASSWORD: password
+
+        steps:
+            - name: Checkout
+              uses: actions/checkout@v5
+
+            - name: Setup PHP
+              uses: shivammathur/setup-php@v2
+              with:
+                  php-version: '8.4'
+                  extensions: mbstring, pdo, pdo_sqlite, sqlite3, pdo_pgsql, pdo_mysql, redis
+                  coverage: none
+
+            - name: Locate composer cache
+              id: composer-cache
+              run: echo "dir=$(composer config cache-files-dir)" >> "$GITHUB_OUTPUT"
+
+            - name: Cache composer packages
+              uses: actions/cache@v4
+              with:
+                  path: ${{ steps.composer-cache.outputs.dir }}
+                  key: composer-${{ runner.os }}-php8.4-databases-${{ hashFiles('composer.json') }}
+                  restore-keys: composer-${{ runner.os }}-php8.4-databases-
+
+            - name: Install dependencies
+              run: composer update --prefer-dist --no-interaction --no-progress
+
+            # An open port is not the same as a server ready to answer, so wait
+            # on a connection that actually succeeds.
+            - name: Wait for the database
+              run: |
+                  php -r '
+                      $dsn = getenv("DB_DRIVER") === "pgsql"
+                          ? "pgsql:host=".getenv("DB_HOST").";port=".getenv("DB_PORT").";dbname=".getenv("DB_DATABASE")
+                          : "mysql:host=".getenv("DB_HOST").";port=".getenv("DB_PORT").";dbname=".getenv("DB_DATABASE");
+
+                      for ($i = 0; $i < 60; $i++) {
+                          try {
+                              new PDO($dsn, getenv("DB_USERNAME"), getenv("DB_PASSWORD"));
+                              echo "Database is ready.\n";
+                              exit(0);
+                          } catch (Throwable $e) {
+                              $last = $e->getMessage();
+                              sleep(2);
+                          }
+                      }
+
+                      fwrite(STDERR, "Database never became reachable: {$last}\n");
+                      exit(1);
+                  '
 
             - name: Run tests
               run: composer test

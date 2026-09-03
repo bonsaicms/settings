@@ -44,7 +44,12 @@
     "require-dev": {
         "orchestra/testbench": "^10.0|^11.0",
         "mockery/mockery": "^1.6",
-        "pestphp/pest": "^4.0"
+        "pestphp/pest": "^4.0",
+        "predis/predis": "^2.0"
+    },
+    "suggest": {
+        "predis/predis": "Required by the redis settings driver, unless the phpredis extension is installed.",
+        "ext-redis": "Required by the redis settings driver, unless predis/predis is installed."
     },
     "scripts": {
         "test": "vendor/bin/pest"

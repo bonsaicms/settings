@@ -22,8 +22,8 @@ Settings::get('owner')->is($user);       // true — same model, re-fetched from
 | Requires | PHP `^8.3`, Laravel `^12.0` or `^13.0` |
 | Install | `composer require bonsaicms/settings` |
 | Entry points | `Settings::` facade, `settings()` helper, `app(BonsaiCms\Settings\Contracts\SettingsManager::class)` |
-| Default storage | `bonsaicms_settings` table, one row per key |
-| On-disk format | `base64_encode(serialize($value))` in a `text` column |
+| Storage | Pluggable drivers: `database` (default), `redis`, `file`, `array` |
+| Stored format | `base64_encode(serialize($value))` |
 | Write model | Write-behind — **nothing is persisted until `save()` is called** |
 | License | MIT |
 
@@ -81,7 +81,7 @@ That is enough to start using the package. The two [middleware](#middleware) bel
 `SettingsManager` is registered as a **singleton** and holds every setting you touch in an in-memory `Collection`, **deserialized**. Reads fill that cache; writes only change it.
 
 ```php
-Settings::set('theme', 'dark');   // in memory only — the database is untouched
+Settings::set('theme', 'dark');   // in memory only — the store is untouched
 Settings::get('theme');           // 'dark'
 // ... request ends here without save() → the change is lost
 ```
@@ -90,7 +90,7 @@ Call `save()` to flush:
 
 ```php
 Settings::set('theme', 'dark');
-Settings::save();                 // now it is in the database
+Settings::save();                 // now it is in the store
 ```
 
 Or register the [`SaveSettings` middleware](#middleware), which calls `save()` for you at the end of every request — but only when something actually changed (`isDirty()`).
@@ -111,18 +111,18 @@ Settings::get('never-set');       // null
 Settings::has('never-set');       // false
 
 Settings::set('theme', null);     // this is a delete
-Settings::save();                 // the row is removed from the database
+Settings::save();                 // the entry is removed from the store
 ```
 
 `has($key)` is literally `get($key) !== null`. Values like `false`, `0` and `''` are stored and reported normally — only `null` is special.
 
 ### Serialization
 
-A value is stored as `base64_encode(serialize($value))` in a `text` column, and read back with `unserialize(base64_decode(...))`.
+A value is stored as `base64_encode(serialize($value))` — in a `text` column, a Redis hash field or a JSON key, depending on the driver — and read back with `unserialize(base64_decode(...))`.
 
 Objects implementing `BonsaiCms\Settings\Contracts\SerializationWrappable` get special treatment: instead of serializing the object graph, the package stores the class name plus a small primitive payload you define, and rebuilds the object on read. See [Storing Eloquent models](#storing-eloquent-models) and [Storing your own objects](#storing-your-own-objects).
 
-> **Security note.** Reading a setting runs `unserialize()` on whatever is in the row. Treat the settings table as trusted storage: never let untrusted input write raw rows into it.
+> **Security note.** Reading a setting runs `unserialize()` on whatever the driver hands back. Treat the settings store as trusted storage — the table, the Redis hash or the JSON file — and never let untrusted input write raw entries into it.
 
 ## API reference
 
@@ -302,45 +302,117 @@ Both middleware are optional. Register them in `bootstrap/app.php`:
 php artisan settings:delete-all
 ```
 
-Calls `Settings::deleteAll()`.
+Calls `Settings::deleteAll()` on the default driver.
+
+```bash
+php artisan settings:delete-all --driver=redis
+```
+
+Empties one named [driver](#drivers) instead, leaving the others alone.
 
 ## Configuration
 
 `config/settings.php` (publish it with `--tag=settings-config`):
 
+### Drivers
+
+Storage works the way Laravel's cache stores do: `default` names one of the `drivers`, and each driver has a `driver` **type** plus its own settings.
+
+```php
+'default' => env('SETTINGS_DRIVER', 'database'),
+
+'drivers' => [
+    'database' => [
+        'driver' => 'database',
+        'connection' => env('SETTINGS_DATABASE_CONNECTION'),   // null = the app's default connection
+        'table' => env('SETTINGS_DATABASE_TABLE', 'bonsaicms_settings'),
+        'model' => BonsaiCms\Settings\Models\Setting::class,
+    ],
+
+    'redis' => [
+        'driver' => 'redis',
+        'connection' => env('SETTINGS_REDIS_CONNECTION', 'default'),
+        'key' => env('SETTINGS_REDIS_KEY', 'bonsaicms_settings'),
+    ],
+
+    'file' => [
+        'driver' => 'file',
+        'path' => env('SETTINGS_FILE_PATH', storage_path('app/bonsaicms_settings.json')),
+    ],
+
+    'array' => [
+        'driver' => 'array',
+    ],
+],
+```
+
+Switching backend is one environment variable:
+
+```bash
+SETTINGS_DRIVER=redis
+```
+
+| Type | Stores | Use |
+|---|---|---|
+| `database` | One row per setting. | **Default.** Needs the published migration. |
+| `redis` | One Redis hash, one field per setting. | Several application servers, or keeping settings off the database. Needs `predis/predis` or `ext-redis`. |
+| `file` | One JSON file. | Settings needed before (or without) a database — an installer, a maintenance switch. Single server. |
+| `array` | Memory. | **Debugging and tests** — it does not survive the request. |
+
+The names are yours, and two drivers may share a type. That is how you keep two sets of settings apart:
+
+```php
+'drivers' => [
+    'tenant_one' => ['driver' => 'redis', 'connection' => 'default', 'key' => 'settings_tenant_one'],
+    'tenant_two' => ['driver' => 'redis', 'connection' => 'default', 'key' => 'settings_tenant_two'],
+],
+```
+
+```php
+use BonsaiCms\Settings\Contracts\SettingsRepositoryFactory;
+
+$repository = app(SettingsRepositoryFactory::class)->driver('tenant_two');
+
+// Point the manager at it — note this shares the manager's cache, so refresh() first
+Settings::refresh();
+Settings::setRepository($repository);
+```
+
+`php artisan settings:delete-all --driver=tenant_two` empties one driver without touching the others.
+
+To add a driver of your own, implement `Contracts\SettingsRepository` with an `array $config` constructor and register its type:
+
+```php
+'driver_implementations' => [
+    // …the four above, plus:
+    'dynamodb' => App\Settings\DynamoDbSettingsRepository::class,
+],
+```
+
+### The database table
+
+Only the `database` driver needs a table. `migrations.driver` names the driver the published migration belongs to, so the migration follows that driver's `connection` and `table`:
+
+```php
+'migrations' => [
+    'driver' => env('SETTINGS_MIGRATION_DRIVER', 'database'),
+],
+```
+
+Schema: `key` — `varchar(255)`, primary key; `value` — `text`, not null; plus `created_at` / `updated_at`.
+
 ### Swapping implementations
 
 ```php
 'implementations' => [
-    BonsaiCms\Settings\Contracts\SettingsManager::class      => BonsaiCms\Settings\SettingsManager::class,
-    BonsaiCms\Settings\Contracts\SettingsSerializer::class   => BonsaiCms\Settings\SettingsSerializer::class,
-    BonsaiCms\Settings\Contracts\SettingsDeserializer::class => BonsaiCms\Settings\SettingsDeserializer::class,
-    BonsaiCms\Settings\Contracts\SettingsRepository::class   => BonsaiCms\Settings\Repositories\DatabaseSettingsRepository::class,
+    BonsaiCms\Settings\Contracts\SettingsManager::class           => BonsaiCms\Settings\SettingsManager::class,
+    BonsaiCms\Settings\Contracts\SettingsSerializer::class        => BonsaiCms\Settings\SettingsSerializer::class,
+    BonsaiCms\Settings\Contracts\SettingsDeserializer::class      => BonsaiCms\Settings\SettingsDeserializer::class,
+    BonsaiCms\Settings\Contracts\SettingsRepositoryFactory::class => BonsaiCms\Settings\SettingsRepositoryFactory::class,
 ],
 ```
 
-Every seam in the package is an interface bound from this array at `register()` time, so replacing any piece is a one-line config change.
-
-Two repositories ship with the package:
-
-| Repository | Use |
-|---|---|
-| `BonsaiCms\Settings\Repositories\DatabaseSettingsRepository` | Default. One row per setting. |
-| `BonsaiCms\Settings\Repositories\ArraySettingsRepository` | In-memory only. **Debugging and tests** — it does not survive the request. |
-
-### Database
-
-```php
-'database' => [
-    'connection' => null,                  // null = the application's default connection
-    'table' => 'bonsaicms_settings',
-    'model' => \BonsaiCms\Settings\Models\Setting::class,
-],
-```
-
-The model resolves its connection and table from this config *at call time*, so changing either takes effect without touching the model. The migration creates the table on the configured connection too.
-
-Schema: `key` — `varchar(255)`, primary key; `value` — `text`, not null; plus `created_at` / `updated_at`.
+Every seam in the package is an interface bound from this array at `register()` time, so replacing any piece is a one-line config change. `SettingsRepository` is not in the list: it is bound to whichever driver `default` names.
 
 ### Exceptions
 
@@ -355,34 +427,36 @@ By default (in production, with `APP_DEBUG=false`) a serialization failure is sw
 
 ## Architecture
 
-Four contracts in `src/BonsaiCms/Settings/Contracts/` are the extension points. Nothing is instantiated directly across a layer boundary — everything is resolved from the container.
+Five contracts in `src/BonsaiCms/Settings/Contracts/` are the extension points. Nothing is instantiated directly across a layer boundary — everything is resolved from the container.
 
 | Contract | Responsibility | Default implementation |
 |---|---|---|
 | `SettingsManager` | The public API and the in-memory cache. Bound as a **singleton** — the only stateful piece. | `SettingsManager` |
-| `SettingsRepository` | Persistence. Works purely in serialized **strings** — it never sees a PHP value or a `Setting` model. | `DatabaseSettingsRepository` |
+| `SettingsRepositoryFactory` | Turns a driver name into a repository. Bound as a **singleton**, and caches one instance per name. | `SettingsRepositoryFactory` |
+| `SettingsRepository` | Persistence. Works purely in serialized **strings** — it never sees a PHP value or a `Setting` model. | whichever driver `settings.default` names |
 | `SettingsSerializer` | PHP value → string | `SettingsSerializer` |
 | `SettingsDeserializer` | string → PHP value | `SettingsDeserializer` |
 
-`SerializationWrappable` is a fifth, user-facing interface — it is implemented by *your* classes, not by the package's internals.
+`SerializationWrappable` is a sixth, user-facing interface — it is implemented by *your* classes, not by the package's internals.
 
 ```
 src/BonsaiCms/Settings/
 ├── Commands/DeleteAllSettingsCommand.php   php artisan settings:delete-all
-├── Contracts/                              the four seams + SerializationWrappable
+├── Contracts/                              the five seams + SerializationWrappable
 ├── Exceptions/                             SerializeException, DeserializeException, …
 ├── Http/Middleware/                        LoadSettings, SaveSettings
 ├── Models/
-│   ├── Setting.php                         the Eloquent model behind the default repository
+│   ├── Setting.php                         the Eloquent model behind the database driver
 │   └── SerializableModelTrait.php          makes your models storable by identity
-├── Repositories/                           DatabaseSettingsRepository, ArraySettingsRepository
+├── Repositories/                           Database, Redis, File and Array repositories
 ├── SerializationWrapper.php                class name + primitive payload envelope
 ├── SettingsManager.php                     the cache, the dirty flag, the API
+├── SettingsRepositoryFactory.php           driver name → repository
 ├── SettingsSerializer.php                  serialize() + base64_encode()
 ├── SettingsDeserializer.php                base64_decode() + unserialize()
 ├── SettingsFacade.php                      the Settings facade
 └── SettingsServiceProvider.php             config-driven bindings, publishing, command
-config/settings.php                         implementations, database, throwExceptions
+config/settings.php                         drivers, implementations, throwExceptions
 database/migrations/                        publishable migration for the settings table
 helpers/helpers.php                         the settings() helper, composer files autoload
 ```
@@ -408,9 +482,23 @@ composer install
 composer test
 ```
 
-The suite runs on [Pest](https://pestphp.com) with `orchestra/testbench` simulating the host application, against an in-memory SQLite database. `tests/Unit` tests the manager against mocked collaborators; `tests/Feature` boots the service provider and exercises real persistence — including running the whole `SettingsRepository` contract against both repository implementations.
+The suite runs on [Pest](https://pestphp.com) with `orchestra/testbench` simulating the host application, against an in-memory SQLite database. `tests/Unit` tests the manager against mocked collaborators; `tests/Feature` boots the service provider and exercises real persistence — including running the whole `SettingsRepository` contract against every driver.
 
-CI runs `composer test` on every push, across PHP 8.3 / 8.4 and Laravel 12 / 13.
+Nothing in `tests/Feature` knows which driver it is running against, so the same suite can be pointed at any of them:
+
+```bash
+SETTINGS_DRIVER=redis composer test
+```
+
+The Redis tests **skip** when there is no Redis to talk to, so `composer test` works on a machine without one. Point `REDIS_HOST` / `REDIS_PORT` at a server to run them, and `REDIS_CLIENT` at `predis` or `phpredis` to pick the client. Likewise `DB_DRIVER` (with `DB_HOST`, `DB_PORT`, `DB_DATABASE`, `DB_USERNAME`, `DB_PASSWORD`) swaps SQLite for a real `pgsql`, `mariadb` or `mysql` server.
+
+CI runs `composer test` on every push in three sets of jobs:
+
+- **versions** — every supported PHP (8.3, 8.4) × Laravel (12, 13), on SQLite.
+- **drivers** — the whole suite once per driver: `database`, `array`, `file` and `redis`, the last on both Redis clients.
+- **databases** — the database driver against real PostgreSQL, MariaDB and MySQL, since the upsert SQL is not the same on every engine.
+
+`SETTINGS_REQUIRE_REDIS=1` is set throughout, so a missing Redis fails the build instead of quietly skipping.
 
 ## Related packages
 

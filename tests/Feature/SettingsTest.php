@@ -1,13 +1,21 @@
 <?php
 
 use Tests\Mocks\TestModel;
-use Illuminate\Support\Facades\DB;
+use Tests\Mocks\ThrowingSettingsRepository;
 use BonsaiCms\Settings\SettingsFacade as Settings;
 use BonsaiCms\Settings\Contracts\SettingsManager;
+use BonsaiCms\Settings\Contracts\SettingsRepository;
+
+/*
+ * Nothing in this file knows which driver it is running against: the suite is
+ * pointed at one with SETTINGS_DRIVER, and CI runs it against every driver in
+ * turn. Keep it that way - assertions about rows and tables belong in
+ * SettingsRepositoryTest.
+ */
 
 /**
  * Drops everything the manager holds in memory, so the next read has to go
- * back to the database.
+ * back to the repository.
  */
 function forgetCachedSettings(): void
 {
@@ -113,7 +121,9 @@ it('deletes a setting when it is set to null', function () {
 
     expect(Settings::get('a'))->toBeNull();
     expect(Settings::has('a'))->toBeFalse();
-    $this->assertDatabaseMissing(config('settings.database.table'), ['key' => 'a']);
+
+    // Not merely absent from the cache - gone from the store underneath
+    expect(app(SettingsRepository::class)->getAll())->not->toHaveKey('a');
 });
 
 it('deletes every setting', function () {
@@ -136,7 +146,7 @@ it('deletes every setting', function () {
     ]);
 });
 
-it('does not query the database again once everything is loaded', function () {
+it('does not go back to the repository once everything is loaded', function () {
     Settings::set([
         'a' => 'A',
         'b' => 'B',
@@ -147,15 +157,18 @@ it('does not query the database again once everything is loaded', function () {
 
     Settings::all();
 
-    DB::connection()->flushQueryLog();
-    DB::connection()->enableQueryLog();
+    /*
+     * all() sets the loadedAll flag, after which a cache miss means the key
+     * genuinely does not exist - so nothing below may reach the store. This is
+     * what makes the LoadSettings middleware pay off.
+     */
+    app(SettingsManager::class)->setRepository(new ThrowingSettingsRepository);
 
     expect(Settings::get('a'))->toBe('A');
     expect(Settings::get(['a', 'b'])->toArray())->toEqual(['a' => 'A', 'b' => 'B']);
     expect(Settings::has('a'))->toBeTrue();
     expect(Settings::get('missing'))->toBeNull();
-
-    expect(DB::connection()->getQueryLog())->toBeEmpty();
+    expect(Settings::all()->toArray())->toEqual(['a' => 'A', 'b' => 'B']);
 });
 
 it('exposes the same manager through the settings helper', function () {

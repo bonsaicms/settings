@@ -7,6 +7,17 @@ use Illuminate\Database\Eloquent\Model;
 class Setting extends Model
 {
     /**
+     * The table associated with the model.
+     *
+     * This is only the fallback. DatabaseSettingsRepository overrides the
+     * table and the connection per driver, so one model class can serve
+     * several drivers pointing at different tables.
+     *
+     * @var string
+     */
+    protected $table = 'bonsaicms_settings';
+
+    /**
      * The primary key for the model.
      *
      * @var string
@@ -33,24 +44,4 @@ class Setting extends Model
      * @var array
      */
     protected $fillable = ['key', 'value'];
-
-    /**
-     * Get the current connection name for the model.
-     *
-     * @return string|null
-     */
-    public function getConnectionName()
-    {
-        return config('settings.database.connection');
-    }
-
-    /**
-     * Get the table associated with the model.
-     *
-     * @return string
-     */
-    public function getTable()
-    {
-        return config('settings.database.table');
-    }
 }
