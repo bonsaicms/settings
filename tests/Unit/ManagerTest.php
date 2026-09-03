@@ -213,6 +213,20 @@ it('returns the keys in the order they were asked for', function () {
         ->toBe(['a', 'b']);
 });
 
+it('asks the repository for a repeated key only once', function () {
+    $this->settingsRepository
+        ->shouldReceive('getItems')->with(['a', 'b'])->once()
+        ->andReturn(['a' => 'A-ser', 'b' => 'B-ser']);
+
+    $this->settingsDeserializer
+        ->shouldReceive('deserialize')->with('A-ser')->once()->andReturn('A');
+    $this->settingsDeserializer
+        ->shouldReceive('deserialize')->with('B-ser')->once()->andReturn('B');
+
+    expect($this->toArray($this->manager->get(['a', 'a', 'b'])))
+        ->toBe(['a' => 'A', 'b' => 'B']);
+});
+
 it('asks the repository once for keys it has already missed', function () {
     $this->settingsRepository
         ->shouldReceive('getItems')->with(['a', 'b'])->once()

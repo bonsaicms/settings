@@ -52,6 +52,8 @@ Storage is configured the way Laravel configures cache stores: `settings.default
 
 **Adding a driver:** implement `Contracts\SettingsRepository` with an `array $config` constructor, add a `driver_implementations` entry, add a `drivers` entry, and add it to the `repositories` dataset in `SettingsRepositoryTest` — the dataset is the only thing keeping the drivers from drifting apart.
 
+**A driver may be handed the same key twice.** `getMany` deduplicates before it asks, but `getItems()` is a public contract and the dataset exercises repeats directly. It matters for `RedisSettingsRepository`, which positions its answers by index: phpredis returns HMGET as an array keyed by field, which Laravel `array_values()`es back into a list, so a repeated field collapses into one value and **every position after it slides** — reading the following keys as absent. predis keeps the repeat, so only one of the two CI clients ever saw it. The driver deduplicates before the call for that reason, and `tests/Unit/RedisRepositoryTest.php` pins both clients' answer shapes against a mocked connection, so the difference is covered even on a machine with no Redis.
+
 Only the `database` driver needs the migration; `settings.migrations.driver` names the database driver whose `connection` and `table` the migration creates, so the two cannot fall out of step.
 
 ### The write-behind cache in SettingsManager

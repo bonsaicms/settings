@@ -126,9 +126,28 @@ it('preserves the requested order in getItems', function ($repository) {
 })->with('repositories');
 
 it('answers a repeated key once in getItems', function ($repository) {
-    $repository->setItem('a', 'A-ser');
+    /*
+     * The manager can hand a repository the same key twice - get(['a', 'a'])
+     * reaches it as it was written - so a driver that positions its answers by
+     * index has to cope. phpredis collapses a repeated HMGET field into one
+     * value and shifts everything after it, which used to lose 'b' here as
+     * well as answering 'a' with null.
+     */
+    $repository->setItems([
+        'a' => 'A-ser',
+        'b' => 'B-ser',
+    ]);
 
     expect($repository->getItems(['a', 'a']))->toEqual(['a' => 'A-ser']);
+    expect($repository->getItems(['a', 'a', 'b']))->toEqual([
+        'a' => 'A-ser',
+        'b' => 'B-ser',
+    ]);
+    expect($repository->getItems(['a', 'missing', 'a', 'b']))->toEqual([
+        'a' => 'A-ser',
+        'missing' => null,
+        'b' => 'B-ser',
+    ]);
 })->with('repositories');
 
 it('returns nothing when asked for no keys', function ($repository) {

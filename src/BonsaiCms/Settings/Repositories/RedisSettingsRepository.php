@@ -67,13 +67,23 @@ class RedisSettingsRepository implements SettingsRepository
         }
 
         /*
+         * Deduplicated first, and not only to save Redis the work: phpredis
+         * answers HMGET with an array keyed by field, which Laravel turns
+         * back into a positional list - so a field asked for twice collapses
+         * into one value there and every position after it slides, reading as
+         * null. predis keeps the repeat. Asking once is the only shape both
+         * clients answer the same way.
+         */
+        $keys = array_values(array_unique(array_values($keys)));
+
+        /*
          * Laravel normalises HMGET across phpredis and predis to a positional
          * list, so the results line up with the requested keys. phpredis
          * reports a missing field as false, predis as null.
          */
-        $values = $this->connection()->hmget($this->key, array_values($keys));
+        $values = $this->connection()->hmget($this->key, $keys);
 
-        return (new Collection(array_values($keys)))
+        return (new Collection($keys))
             ->mapWithKeys(function ($key, $index) use ($values) {
                 return [$key => $this->normalize($values[$index] ?? null)];
             })

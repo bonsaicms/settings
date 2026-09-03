@@ -197,7 +197,9 @@ class SettingsManager implements Contracts\SettingsManager
     protected function getMany($keys): Collection
     {
         $keys = $this->toCollection($keys);
-        $missingKeys = $keys->diff($this->getCachedKeys())->values();
+
+        // Asking the repository for the same key twice is only ever waste
+        $missingKeys = $keys->diff($this->getCachedKeys())->unique()->values();
 
         // Load missing (non-cached) items
         if ($missingKeys->isNotEmpty() && !$this->loadedAll) {
