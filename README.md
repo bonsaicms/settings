@@ -95,12 +95,12 @@ Settings::save();                 // now it is in the store
 
 Or register the [`SaveSettings` middleware](#middleware), which calls `save()` for you at the end of every request — but only when something actually changed (`isDirty()`).
 
-Two flags drive the whole thing:
+Two pieces of state drive the whole thing:
 
-- **`isDirty()`** — becomes `true` on any `set()`, `false` again after `save()` or `refresh()`.
+- **`isDirty()`** — true as soon as a `set()` has happened, false again after `save()` or `refresh()`. The manager remembers *which* keys were touched, not merely that something was.
 - **`all()` marks everything as loaded** — once you have called `all()` (directly or through the `LoadSettings` middleware), the manager knows the full key set, so every later `get()` / `has()` is answered from memory with **zero queries**. A cache miss then means the key genuinely does not exist.
 
-`save()` writes back the **entire cache**, not just the keys you changed.
+`save()` writes back **only the keys you changed**, never the whole cache.
 
 ### null means "absent"
 
@@ -143,6 +143,8 @@ Every method is available on the `Settings` facade, on `settings()`, and on the 
 | `getRepository()` / `setRepository()` | Swap the storage backend at runtime. |
 | `getSerializer()` / `setSerializer()` | Swap the serializer at runtime. |
 | `getDeserializer()` / `setDeserializer()` | Swap the deserializer at runtime. |
+
+Anywhere an `array` is shown above, an `Illuminate\Support\Collection` works too.
 
 ### Examples
 
@@ -469,7 +471,7 @@ Behaviours that are easy to get wrong — worth reading whether you are writing 
 1. **`set()` does not write to the database.** Only `save()` (or the `SaveSettings` middleware) does. Code that sets a value in an Artisan command or a queued job and never calls `save()` silently loses it.
 2. **`deleteAll()` is the exception** — it hits the repository immediately and does not wait for `save()`.
 3. **You cannot store `null`.** Setting a key to `null` deletes it; reading a missing key gives `null`. Use a sentinel of your own if you need to distinguish "absent" from "explicitly empty".
-4. **`refresh()` throws away unsaved changes.** It resets the cache and clears the dirty flag.
+4. **`refresh()` throws away unsaved changes.** It resets the cache and forgets which keys were dirty.
 5. **`save()` writes only what you `set()`.** Keys that were merely read — including by `all()` — are left alone, so a request that changes one setting cannot undo another request's changes to the rest.
 6. **`get(array $keys)` never omits keys.** Missing ones come back as `null`, so the result count always matches the request, and the order matches too.
 7. **Serialization errors are silent in production.** With `APP_DEBUG=false` a failed serialize/deserialize yields `null` rather than an exception — see [Exceptions](#exceptions).
@@ -493,8 +495,19 @@ SETTINGS_DRIVER=redis composer test
 
 The Redis tests **skip** when there is no Redis to talk to, so `composer test` works on a machine without one. Point `REDIS_HOST` / `REDIS_PORT` at a server to run them, and `REDIS_CLIENT` at `predis` or `phpredis` to pick the client. Likewise `DB_DRIVER` (with `DB_HOST`, `DB_PORT`, `DB_DATABASE`, `DB_USERNAME`, `DB_PASSWORD`) swaps SQLite for a real `pgsql`, `mariadb` or `mysql` server.
 
-CI runs `composer test` on every push in three sets of jobs:
+### Static analysis
 
+```bash
+composer analyse
+```
+
+PHPStan (through [larastan](https://github.com/larastan/larastan)) at **level 8**, over `src`, `config`, `database`, `helpers` and `tests/Mocks`. It runs as its own CI job, so a change is expected to keep it green.
+
+### Continuous integration
+
+CI runs on every push in four sets of jobs:
+
+- **analyse** — `composer analyse`. It needs no service containers, so it is the first job to fail.
 - **versions** — every supported PHP (8.3, 8.4) × Laravel (12, 13), on SQLite.
 - **drivers** — the whole suite once per driver: `database`, `array`, `file` and `redis`, the last on both Redis clients.
 - **databases** — the database driver against real PostgreSQL, MariaDB and MySQL, since the upsert SQL is not the same on every engine.
