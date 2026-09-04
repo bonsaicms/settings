@@ -14,7 +14,7 @@ use Closure;
  */
 class UnserializableClass
 {
-    public $callback;
+    public Closure $callback;
 
     public function __construct()
     {

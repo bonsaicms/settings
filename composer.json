@@ -37,7 +37,7 @@
                 "BonsaiCms\\Settings\\SettingsServiceProvider"
             ],
             "aliases": {
-                "Settings": "BonsaiCms\\Settings\\SettingsFacade"
+                "Settings": "BonsaiCms\\Settings\\Facades\\Settings"
             }
         }
     },
@@ -45,14 +45,20 @@
         "orchestra/testbench": "^10.0|^11.0",
         "mockery/mockery": "^1.6",
         "pestphp/pest": "^4.0",
-        "predis/predis": "^2.0"
+        "predis/predis": "^2.0",
+        "larastan/larastan": "^3.11"
     },
     "suggest": {
         "predis/predis": "Required by the redis settings driver, unless the phpredis extension is installed.",
         "ext-redis": "Required by the redis settings driver, unless predis/predis is installed."
     },
     "scripts": {
-        "test": "vendor/bin/pest"
+        "test": "vendor/bin/pest",
+        "analyse": "phpstan analyse --memory-limit=1G"
+    },
+    "scripts-descriptions": {
+        "test": "Run the Pest suite against the driver SETTINGS_DRIVER names.",
+        "analyse": "Run PHPStan over the package."
     },
     "config": {
         "allow-plugins": {

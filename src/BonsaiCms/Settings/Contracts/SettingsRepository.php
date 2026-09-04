@@ -4,15 +4,35 @@ namespace BonsaiCms\Settings\Contracts;
 
 interface SettingsRepository
 {
-    function setItem(string $key, $value) : void;
+    /**
+     * Store one already serialized value.
+     *
+     * A null value means "absent" everywhere in this package, so it removes
+     * the key instead of storing anything - a repository that stored a null
+     * would make has() report a missing setting as present.
+     */
+    public function setItem(string $key, ?string $value): void;
 
-    function setItems(array $items) : void;
+    /**
+     * @param  array<string, string|null>  $items
+     */
+    public function setItems(array $items): void;
 
-    function getItem(string $key);
+    public function getItem(string $key): ?string;
 
-    function getItems(array $keys) : array;
+    /**
+     * Answer in the order the keys were asked for, with null for every key
+     * that is not stored. The same key may be asked for more than once.
+     *
+     * @param  array<int, string>  $keys
+     * @return array<string, string|null>
+     */
+    public function getItems(array $keys): array;
 
-    function getAll() : array;
+    /**
+     * @return array<string, string>
+     */
+    public function getAll(): array;
 
-    function deleteAll() : void;
+    public function deleteAll(): void;
 }

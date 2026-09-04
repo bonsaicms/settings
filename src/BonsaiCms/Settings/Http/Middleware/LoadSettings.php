@@ -3,18 +3,22 @@
 namespace BonsaiCms\Settings\Http\Middleware;
 
 use Closure;
+use Illuminate\Http\Request;
+use Symfony\Component\HttpFoundation\Response;
 use BonsaiCms\Settings\Contracts\SettingsManager;
 
+/**
+ * Loads every setting up front, so each get() further down the request is
+ * answered from memory instead of from the store.
+ */
 class LoadSettings
 {
-    protected $settingsManager;
-
-    public function __construct(SettingsManager $settingsManager)
-    {
-        $this->settingsManager = $settingsManager;
+    public function __construct(
+        protected readonly SettingsManager $settingsManager
+    ) {
     }
 
-    public function handle($request, Closure $next)
+    public function handle(Request $request, Closure $next): Response
     {
         $this->settingsManager->all();
 

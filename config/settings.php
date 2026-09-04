@@ -102,20 +102,33 @@ return [
 
     /*
     |--------------------------------------------------------------------------
-    | Bind Implementations
+    | Contract Bindings
     |--------------------------------------------------------------------------
     |
-    | Every seam in the package is an interface bound from this array at
-    | register() time, so replacing any piece is a one line change.
+    | Every seam in the package is an interface, bound to the class named
+    | here, so replacing any piece is a one line change.
+    |
+    | Not to be confused with "driver_implementations" above: that one maps a
+    | storage type to a repository, this one wires up the package itself.
     |
     */
-    'implementations' => [
+    'bindings' => [
         BonsaiCms\Settings\Contracts\SettingsManager::class => BonsaiCms\Settings\SettingsManager::class,
         BonsaiCms\Settings\Contracts\SettingsSerializer::class => BonsaiCms\Settings\SettingsSerializer::class,
         BonsaiCms\Settings\Contracts\SettingsDeserializer::class => BonsaiCms\Settings\SettingsDeserializer::class,
         BonsaiCms\Settings\Contracts\SettingsRepositoryFactory::class => BonsaiCms\Settings\SettingsRepositoryFactory::class,
     ],
 
+    /*
+    |--------------------------------------------------------------------------
+    | Failure Reporting
+    |--------------------------------------------------------------------------
+    |
+    | A value that cannot be written, or a stored value that cannot be read
+    | back, answers null in production rather than taking the application down
+    | over one setting. Turn these on to be told about it instead.
+    |
+    */
     'throwExceptions' => [
         'serialize' => env('APP_DEBUG'),
         'deserialize' => env('APP_DEBUG'),

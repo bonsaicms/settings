@@ -3,7 +3,7 @@
 namespace Tests;
 
 use BonsaiCms\Settings\Contracts\SettingsRepositoryFactory;
-use BonsaiCms\Settings\SettingsFacade;
+use BonsaiCms\Settings\Facades\Settings as SettingsFacade;
 use BonsaiCms\Settings\SettingsServiceProvider;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use InvalidArgumentException;

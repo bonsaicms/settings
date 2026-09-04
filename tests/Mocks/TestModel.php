@@ -5,12 +5,12 @@ namespace Tests\Mocks;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
+use BonsaiCms\Settings\Concerns\SerializableModel;
 use BonsaiCms\Settings\Contracts\SerializationWrappable;
-use BonsaiCms\Settings\Models\SerializableModelTrait;
 
 class TestModel extends Model implements SerializationWrappable
 {
-    use SerializableModelTrait;
+    use SerializableModel;
 
     protected $table = 'test_models';
 

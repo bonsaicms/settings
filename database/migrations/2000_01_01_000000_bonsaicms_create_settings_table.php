@@ -2,6 +2,7 @@
 
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Database\Schema\Builder;
 use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
@@ -30,7 +31,7 @@ return new class extends Migration
      * The settings driver may live on its own connection, so the table has to
      * be created there and not on the application's default connection.
      */
-    protected function schema()
+    protected function schema(): Builder
     {
         return Schema::connection($this->driver()['connection'] ?? null);
     }
@@ -43,6 +44,8 @@ return new class extends Migration
     /**
      * The database driver this migration belongs to, named by
      * "settings.migrations.driver".
+     *
+     * @return array<string, mixed>
      */
     protected function driver(): array
     {

@@ -1,0 +1,28 @@
+includes:
+    - vendor/larastan/larastan/extension.neon
+
+parameters:
+    level: 8
+
+    paths:
+        - config
+        - database
+        - helpers
+        - src
+        - tests/Mocks
+
+    # The Pest suite itself is deliberately left out: Pest binds $this inside
+    # every test closure at runtime, which PHPStan cannot model, so analysing
+    # it would drown the findings about the package in false positives.
+    # tests/Mocks holds plain classes, so those are analysed - and they are
+    # what proves the contracts can be implemented from outside the package.
+
+    # Level 9 is within reach too, but only by guarding every config read at
+    # runtime against a value that is not a string - noise for a library whose
+    # config keys are strings by definition.
+
+    # This IS the config directory; the rule is looking for an application
+    # layout that a package does not have.
+    noEnvCallsOutsideOfConfig: false
+
+    checkModelProperties: true

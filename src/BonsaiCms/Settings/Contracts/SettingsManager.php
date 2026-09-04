@@ -6,49 +6,46 @@ use Illuminate\Support\Collection;
 
 interface SettingsManager
 {
-    /**
-     * @return SettingsRepository
-     */
-    function getRepository(): SettingsRepository;
+    public function getRepository(): SettingsRepository;
+
+    public function setRepository(SettingsRepository $repository): void;
+
+    public function getSerializer(): SettingsSerializer;
+
+    public function setSerializer(SettingsSerializer $serializer): void;
+
+    public function getDeserializer(): SettingsDeserializer;
+
+    public function setDeserializer(SettingsDeserializer $deserializer): void;
 
     /**
-     * @param SettingsRepository $repository
+     * Write into the in-memory cache: one key and a value, or a map of pairs.
+     * Nothing reaches the store until save() runs.
+     *
+     * @param  string|array<string, mixed>|Collection<string, mixed>  $keyOrPairs
      */
-    function setRepository(SettingsRepository $repository) : void;
+    public function set(string|array|Collection $keyOrPairs, mixed $value = null): void;
 
     /**
-     * @return SettingsSerializer
+     * Read one key, or a list of keys - which answers a Collection keyed off
+     * the requested keys, in the order they were asked for.
+     *
+     * @param  string|array<int, string>|Collection<int, string>  $keyOrKeys
      */
-    function getSerializer(): SettingsSerializer;
+    public function get(string|array|Collection $keyOrKeys): mixed;
+
+    public function has(string $key): bool;
 
     /**
-     * @param SettingsSerializer $serializer
+     * @return Collection<string, mixed>
      */
-    function setSerializer(SettingsSerializer $serializer) : void;
+    public function all(): Collection;
 
-    /**
-     * @return SettingsDeserializer
-     */
-    function getDeserializer(): SettingsDeserializer;
+    public function save(): void;
 
-    /**
-     * @param SettingsDeserializer $deserializer
-     */
-    function setDeserializer(SettingsDeserializer $deserializer) : void;
+    public function deleteAll(): void;
 
-    function set($keyOrPairs, $valueOrNull = null) : void;
+    public function refresh(): void;
 
-    function get($keyOrKeys);
-
-    function has($key) : bool;
-
-    function all();
-
-    function save() : void;
-
-    function deleteAll() : void;
-
-    function refresh() : void;
-
-    function isDirty() : bool;
+    public function isDirty(): bool;
 }

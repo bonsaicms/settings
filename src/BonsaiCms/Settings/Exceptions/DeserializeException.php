@@ -2,7 +2,7 @@
 
 namespace BonsaiCms\Settings\Exceptions;
 
-class DeserializeException extends AbstractException
+class DeserializeException extends SettingsException
 {
     //
 }

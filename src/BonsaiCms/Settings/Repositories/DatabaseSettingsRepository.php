@@ -2,23 +2,31 @@
 
 namespace BonsaiCms\Settings\Repositories;
 
-use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Collection;
 use BonsaiCms\Settings\Contracts\SettingsRepository;
 use BonsaiCms\Settings\Models\Setting;
 
 class DatabaseSettingsRepository implements SettingsRepository
 {
-    protected $model;
+    /**
+     * @var class-string<Setting>
+     */
+    protected string $model;
 
-    protected $connection;
+    protected ?string $connection;
 
-    protected $table;
+    protected ?string $table;
 
     /**
      * The connection and table come from the driver configuration rather than
      * from the model, so two database drivers can point at two different
      * tables without needing two model classes.
+     *
+     * A driver may name a model of its own, as long as it extends Setting -
+     * the "key" and "value" columns are what this repository speaks.
+     *
+     * @param  array<string, mixed>  $config
      */
     public function __construct(array $config = [])
     {
@@ -27,19 +35,14 @@ class DatabaseSettingsRepository implements SettingsRepository
         $this->table = $config['table'] ?? null;
     }
 
-    public function setItem(string $key, $value): void
+    public function setItem(string $key, ?string $value): void
     {
         if ($value === null) {
             $this->query()->whereKey($key)->delete();
         } else {
             $this->query()->updateOrCreate(
-                [
-                    'key' => $key,
-                ],
-                [
-                    'key' => $key,
-                    'value' => $value,
-                ]
+                ['key' => $key],
+                ['key' => $key, 'value' => $value]
             );
         }
     }
@@ -47,38 +50,30 @@ class DatabaseSettingsRepository implements SettingsRepository
     public function setItems(array $items): void
     {
         $this->newModel()->getConnection()->transaction(function () use ($items) {
-            list($itemsToDelete, $itemsToUpsert) = (new Collection($items))
-                ->partition(function ($value, $key) {
-                    return ($value === null);
-                });
+            $keysToDelete = [];
+            $rowsToUpsert = [];
 
-            // Delete items with null value
-            if ($itemsToDelete->isNotEmpty()) {
-                $this->query()->whereIn('key', $itemsToDelete->keys()->toArray())->delete();
+            foreach ($items as $key => $value) {
+                if ($value === null) {
+                    $keysToDelete[] = (string) $key;
+                } else {
+                    $rowsToUpsert[] = ['key' => (string) $key, 'value' => $value];
+                }
             }
 
-            // Upsert items with non-null values
-            if ($itemsToUpsert->isNotEmpty()) {
-                $this->query()->upsert(
-                    $itemsToUpsert->map(function ($value, $key) {
-                        return [
-                            'key' => $key,
-                            'value' => $value,
-                        ];
-                    })->values()->toArray(),
-                    'key'
-                );
+            if ($keysToDelete !== []) {
+                $this->query()->whereIn('key', $keysToDelete)->delete();
+            }
+
+            if ($rowsToUpsert !== []) {
+                $this->query()->upsert($rowsToUpsert, 'key');
             }
         });
     }
 
-    public function getItem(string $key)
+    public function getItem(string $key): ?string
     {
-        $item = $this->query()->find($key);
-
-        return $item
-            ? $item->value
-            : null;
+        return $this->query()->find($key)?->value;
     }
 
     public function getItems(array $keys): array
@@ -87,21 +82,22 @@ class DatabaseSettingsRepository implements SettingsRepository
             return [];
         }
 
-        $items = $this->query()->whereIn('key', $keys)->get()->mapWithKeys(function ($item) {
-            return [$item->key => $item->value];
-        });
+        $items = $this->query()
+            ->whereIn('key', $keys)
+            ->get()
+            ->mapWithKeys(fn ($item) => [$item->key => $item->value]);
 
-        return (new Collection($keys))->mapWithKeys(function ($key) use ($items) {
-            return [$key => $items->get($key)];
-        })->toArray();
+        return (new Collection($keys))
+            ->mapWithKeys(fn ($key) => [$key => $items->get($key)])
+            ->all();
     }
 
     public function getAll(): array
     {
-        return $this->query()->pluck('value', 'key')->toArray();
+        return $this->query()->pluck('value', 'key')->all();
     }
 
-    public function deleteAll() : void
+    public function deleteAll(): void
     {
         /*
          * Deliberately not truncate(): on SQLite it also touches the
@@ -113,9 +109,9 @@ class DatabaseSettingsRepository implements SettingsRepository
     }
 
     /**
-     * A fresh model bound to this driver's connection and table.
+     * A fresh model bound to this driver connection and table.
      */
-    protected function newModel() : Model
+    protected function newModel(): Setting
     {
         $model = new $this->model;
 
@@ -130,7 +126,10 @@ class DatabaseSettingsRepository implements SettingsRepository
         return $model;
     }
 
-    protected function query()
+    /**
+     * @return Builder<Setting>
+     */
+    protected function query(): Builder
     {
         return $this->newModel()->newQuery();
     }

@@ -4,158 +4,115 @@ namespace BonsaiCms\Settings;
 
 use Illuminate\Support\Collection;
 
+/**
+ * A write-behind cache in front of a SettingsRepository.
+ *
+ * Values are held deserialized in memory and serialized only in save(), which
+ * writes back the keys that set() actually touched. Two pieces of state drive
+ * nearly everything else: loadedAll, after which a cache miss means the key
+ * genuinely does not exist, and the set of dirty keys, which is what save()
+ * writes and what isDirty() answers from.
+ */
 class SettingsManager implements Contracts\SettingsManager
 {
-    protected $cache;
-    protected $dirty = false;
-    protected $loadedAll = false;
+    /**
+     * The deserialized values, plus a null for every key that turned out not
+     * to exist - reading a miss twice is not worth a second query.
+     *
+     * @var Collection<string, mixed>
+     */
+    protected Collection $cache;
 
     /**
-     * @var Contracts\SettingsRepository
+     * The keys set() has touched since the last save, as a map so a key
+     * written twice is still written back once.
+     *
+     * @var array<string, true>
      */
-    protected $repository;
+    protected array $dirtyKeys = [];
 
-    /**
-     * @var Contracts\SettingsSerializer
-     */
-    protected $serializer;
+    protected bool $loadedAll = false;
 
-    /**
-     * @var Contracts\SettingsDeserializer
-     */
-    protected $deserializer;
+    protected Contracts\SettingsRepository $repository;
 
-    /**
-     * @param Contracts\SettingsRepository $repository
-     * @param Contracts\SettingsSerializer $serializer
-     * @param Contracts\SettingsDeserializer $deserializer
-     */
+    protected Contracts\SettingsSerializer $serializer;
+
+    protected Contracts\SettingsDeserializer $deserializer;
+
     public function __construct(
         Contracts\SettingsRepository $repository,
         Contracts\SettingsSerializer $serializer,
         Contracts\SettingsDeserializer $deserializer
-    )
-    {
+    ) {
         $this->setRepository($repository);
         $this->setSerializer($serializer);
         $this->setDeserializer($deserializer);
 
-        $this->initializeCache();
-    }
-
-    protected function initializeCache()
-    {
         $this->cache = new Collection;
     }
 
-    /**
-     * @return Contracts\SettingsRepository
-     */
     public function getRepository(): Contracts\SettingsRepository
     {
         return $this->repository;
     }
 
-    /**
-     * @param Contracts\SettingsRepository $repository
-     */
-    public function setRepository(Contracts\SettingsRepository $repository) : void
+    public function setRepository(Contracts\SettingsRepository $repository): void
     {
         $this->repository = $repository;
     }
 
-    /**
-     * @return Contracts\SettingsSerializer
-     */
     public function getSerializer(): Contracts\SettingsSerializer
     {
         return $this->serializer;
     }
 
-    /**
-     * @param Contracts\SettingsSerializer $serializer
-     */
-    public function setSerializer(Contracts\SettingsSerializer $serializer) : void
+    public function setSerializer(Contracts\SettingsSerializer $serializer): void
     {
         $this->serializer = $serializer;
     }
 
-    /**
-     * @return Contracts\SettingsDeserializer
-     */
     public function getDeserializer(): Contracts\SettingsDeserializer
     {
         return $this->deserializer;
     }
 
-    /**
-     * @param Contracts\SettingsDeserializer $deserializer
-     */
-    public function setDeserializer(Contracts\SettingsDeserializer $deserializer) : void
+    public function setDeserializer(Contracts\SettingsDeserializer $deserializer): void
     {
         $this->deserializer = $deserializer;
     }
 
-    public function set($keyOrPairs, $valueOrNull = null) : void
+    public function set(string|array|Collection $keyOrPairs, mixed $value = null): void
     {
         if (is_string($keyOrPairs)) {
-            $this->setOne($keyOrPairs, $valueOrNull);
-        } else {
-            $this->setMany($keyOrPairs);
+            $this->setOne($keyOrPairs, $value);
+
+            return;
+        }
+
+        foreach ($keyOrPairs as $key => $pairValue) {
+            $this->setOne((string) $key, $pairValue);
         }
     }
 
-    protected function setOne(string $key, $value)
+    public function get(string|array|Collection $keyOrKeys): mixed
     {
-        $this->cache[$key] = $value;
-
-        $this->setDirty();
-
-        return $this;
-    }
-
-    /**
-     * @param array | Collection $items
-     */
-    protected function setMany($items = [])
-    {
-        if (count($items) > 0) {
-            $this->setDirty();
-        }
-
-        foreach ($items as $key => $value) {
-            $this->setOne($key, $value);
-        }
-
-        return $this;
-    }
-
-    public function get($keyOrKeys)
-    {
-        return (is_string($keyOrKeys))
+        return is_string($keyOrKeys)
             ? $this->getOne($keyOrKeys)
             : $this->getMany($keyOrKeys);
     }
 
-
-    public function has($key) : bool
+    public function has(string $key): bool
     {
-        return ($this->getOne($key) !== null);
+        return $this->getOne($key) !== null;
     }
 
-    public function all()
+    public function all(): Collection
     {
-        if ( ! $this->loadedAll) {
-            $this->cache = $this->toCollection(
-                $this
-                    ->repository
-                    ->getAll()
-            )
+        if (! $this->loadedAll) {
+            $this->cache = $this->toCollection($this->repository->getAll())
                 ->diffKeys($this->getCachedKeys()->flip())
-            ->map(function ($serialized) {
-                return $this->deserializer->deserialize($serialized);
-            })
-            ->merge($this->cache);
+                ->map(fn ($serialized) => $this->deserialize($serialized))
+                ->merge($this->cache);
 
             $this->loadedAll = true;
         }
@@ -167,53 +124,82 @@ class SettingsManager implements Contracts\SettingsManager
          * "absent" everywhere else in the package, so a key holding one is not
          * a setting and has no business showing up here.
          */
-        return $this->cache->filter(function ($value) {
-            return $value !== null;
-        });
+        return $this->cache->filter(fn ($value) => $value !== null);
     }
 
-    protected function shouldSerialize($value)
+    public function save(): void
     {
-        return ($value !== null);
+        /*
+         * Only what set() touched. Writing the whole cache back would rewrite
+         * every setting after an all() - bumping rows nobody edited, letting
+         * two concurrent requests undo each other's changes, and deleting keys
+         * this request only ever read and found missing.
+         */
+        $items = $this->cache
+            ->only(array_keys($this->dirtyKeys))
+            ->map(fn ($deserialized) => $this->serialize($deserialized));
+
+        if ($items->count() === 1) {
+            $this->repository->setItem((string) $items->keys()->first(), $items->first());
+        } elseif ($items->isNotEmpty()) {
+            $this->repository->setItems($items->toArray());
+        }
+
+        $this->dirtyKeys = [];
     }
 
-    protected function shouldDeserialize($value)
+    public function refresh(): void
     {
-        return ($value !== null);
+        $this->cache = new Collection;
+        $this->loadedAll = false;
+        $this->dirtyKeys = [];
     }
 
-    protected function getOne($key)
+    public function deleteAll(): void
     {
-        if ( ! $this->isCached($key) && $this->loadedAll === false) {
-            $serialized = $this->repository->getItem($key);
-            $this->cache[$key] = $this->shouldDeserialize($serialized)
-                ? $this->deserializer->deserialize($serialized)
-                : $serialized;
+        $this->cache = new Collection;
+        $this->loadedAll = true;
+        $this->dirtyKeys = [];
+
+        $this->repository->deleteAll();
+    }
+
+    public function isDirty(): bool
+    {
+        return $this->dirtyKeys !== [];
+    }
+
+    protected function setOne(string $key, mixed $value): void
+    {
+        $this->cache[$key] = $value;
+
+        $this->dirtyKeys[$key] = true;
+    }
+
+    protected function getOne(string $key): mixed
+    {
+        if (! $this->isCached($key) && ! $this->loadedAll) {
+            $this->cache[$key] = $this->deserialize($this->repository->getItem($key));
         }
 
         return $this->cache->get($key);
     }
 
-    protected function getMany($keys): Collection
+    /**
+     * @param  array<int, string>|Collection<int, string>  $keys
+     * @return Collection<string, mixed>
+     */
+    protected function getMany(array|Collection $keys): Collection
     {
         $keys = $this->toCollection($keys);
 
         // Asking the repository for the same key twice is only ever waste
         $missingKeys = $keys->diff($this->getCachedKeys())->unique()->values();
 
-        // Load missing (non-cached) items
-        if ($missingKeys->isNotEmpty() && !$this->loadedAll) {
+        if ($missingKeys->isNotEmpty() && ! $this->loadedAll) {
             $this->cache = $this->cache->merge(
-                $this->toCollection(
-                    $this
-                        ->repository
-                        ->getItems($missingKeys->toArray())
-                )
-                ->map(function ($serialized) {
-                    return $this->shouldDeserialize($serialized)
-                        ? $this->deserializer->deserialize($serialized)
-                        : $serialized;
-                })
+                $this->toCollection($this->repository->getItems($missingKeys->all()))
+                    ->map(fn ($serialized) => $this->deserialize($serialized))
             );
         }
 
@@ -228,30 +214,31 @@ class SettingsManager implements Contracts\SettingsManager
          * already in memory - the same guarantee every repository gives for
          * getItems().
          */
-        return $keys->mapWithKeys(function ($key) {
-            return [$key => $this->cache->get($key)];
-        });
+        return $keys->mapWithKeys(fn ($key) => [$key => $this->cache->get($key)]);
     }
 
-    public function save() : void
+    /**
+     * Null never reaches the serializer: it means "absent", and deciding that
+     * here rather than leaving it to the serializer is what stops a
+     * replacement implementation from quietly storing a value for a delete.
+     */
+    protected function serialize(mixed $value): ?string
     {
-        $items = $this->cache->map(function ($deserialized) {
-            return $this->shouldSerialize($deserialized)
-                ? $this->serializer->serialize($deserialized)
-                : $deserialized;
-        });
-
-        if ($items->isNotEmpty()) {
-            if ($items->count() > 1) {
-                $this->repository->setItems($items->toArray());
-            } else {
-                $this->repository->setItem($items->keys()->first(), $items->first());
-            }
-        }
-
-        $this->setDirty(false);
+        return $value === null
+            ? null
+            : $this->serializer->serialize($value);
     }
 
+    protected function deserialize(?string $serialized): mixed
+    {
+        return $serialized === null
+            ? null
+            : $this->deserializer->deserialize($serialized);
+    }
+
+    /**
+     * @return Collection<int, string>
+     */
     protected function getCachedKeys(): Collection
     {
         return $this->cache->keys();
@@ -262,37 +249,14 @@ class SettingsManager implements Contracts\SettingsManager
         return $this->cache->has($key);
     }
 
-    protected function toCollection($mixed): Collection
+    /**
+     * @param  iterable<array-key, mixed>  $mixed
+     * @return Collection<array-key, mixed>
+     */
+    protected function toCollection(iterable $mixed): Collection
     {
-        return ($mixed instanceof Collection)
+        return $mixed instanceof Collection
             ? $mixed
             : new Collection($mixed);
-    }
-
-    public function refresh() : void
-    {
-        $this->cache = null;
-        $this->loadedAll = false;
-
-        $this->setDirty(false);
-
-        $this->initializeCache();
-    }
-
-    public function deleteAll() : void
-    {
-        $this->cache = new Collection;
-        $this->loadedAll = true;
-        $this->repository->deleteAll();
-    }
-
-    protected function setDirty($dirty = true) : void
-    {
-        $this->dirty = $dirty;
-    }
-
-    public function isDirty() : bool
-    {
-        return $this->dirty;
     }
 }

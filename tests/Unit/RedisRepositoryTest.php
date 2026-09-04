@@ -20,7 +20,19 @@ use BonsaiCms\Settings\Repositories\RedisSettingsRepository;
 */
 
 /**
+ * A driver talking to the given mocked connection, over the hash "settings".
+ */
+function repositoryOver(object $connection): RedisSettingsRepository
+{
+    $factory = Mockery::mock(RedisFactory::class);
+    $factory->shouldReceive('connection')->andReturn($connection);
+
+    return new RedisSettingsRepository($factory, ['key' => 'settings']);
+}
+
+/**
  * @param  mixed  $hmgetAnswer  what Laravel's connection returns for hmget
+ * @param  array<int, string>|null  $askedFor  the fields the driver asked for
  */
 function redisRepository($hmgetAnswer, ?array &$askedFor = null): RedisSettingsRepository
 {
@@ -33,10 +45,7 @@ function redisRepository($hmgetAnswer, ?array &$askedFor = null): RedisSettingsR
             return $hmgetAnswer;
         });
 
-    $factory = Mockery::mock(RedisFactory::class);
-    $factory->shouldReceive('connection')->andReturn($connection);
-
-    return new RedisSettingsRepository($factory, ['key' => 'settings']);
+    return repositoryOver($connection);
 }
 
 it('reads a predis answer, which is a positional list with nulls', function () {
@@ -94,10 +103,49 @@ it('does not go to redis at all when there is nothing to ask for', function () {
     $connection = Mockery::mock();
     $connection->shouldReceive('hmget')->never();
 
-    $factory = Mockery::mock(RedisFactory::class);
-    $factory->shouldReceive('connection')->andReturn($connection);
+    expect(repositoryOver($connection)->getItems([]))->toBe([]);
+});
 
-    $repository = new RedisSettingsRepository($factory, ['key' => 'settings']);
+/*
+|--------------------------------------------------------------------------
+| The commands the other methods send
+|--------------------------------------------------------------------------
+|
+| A mocked connection is the only place these can be pinned on a machine with
+| no Redis, and CI is the only place phpredis runs at all - so what each
+| method sends is worth asserting here rather than only through a live server.
+|
+*/
 
-    expect($repository->getItems([]))->toBe([]);
+it('splits a write into one HDEL and one HMSET', function () {
+    $connection = Mockery::mock();
+
+    $connection->shouldReceive('hdel')->with('settings', 'gone', 'also-gone')->once();
+    $connection->shouldReceive('hmset')->with('settings', ['a' => 'A-ser', 'b' => 'B-ser'])->once();
+
+    repositoryOver($connection)->setItems([
+        'a' => 'A-ser',
+        'gone' => null,
+        'b' => 'B-ser',
+        'also-gone' => null,
+    ]);
+});
+
+it('sends no command for a half of the write that is empty', function () {
+    $connection = Mockery::mock();
+
+    $connection->shouldReceive('hdel')->never();
+    $connection->shouldReceive('hmset')->with('settings', ['a' => 'A-ser'])->once();
+
+    repositoryOver($connection)->setItems(['a' => 'A-ser']);
+});
+
+it('leaves nothing out of HGETALL, since every field of a hash is present', function () {
+    $connection = Mockery::mock();
+
+    $connection->shouldReceive('hgetall')->with('settings')->once()
+        ->andReturn(['a' => 'A-ser', 'b' => '']);
+
+    // The empty string is a value like any other, so it must survive
+    expect(repositoryOver($connection)->getAll())->toBe(['a' => 'A-ser', 'b' => '']);
 });

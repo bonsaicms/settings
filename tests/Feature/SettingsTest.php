@@ -3,7 +3,7 @@
 use Tests\Mocks\TestModel;
 use Tests\Mocks\TestWrappableClass;
 use Tests\Mocks\ThrowingSettingsRepository;
-use BonsaiCms\Settings\SettingsFacade as Settings;
+use BonsaiCms\Settings\Facades\Settings;
 use BonsaiCms\Settings\SettingsManager;
 use BonsaiCms\Settings\Contracts;
 
@@ -198,8 +198,7 @@ it('round trips an object that says how to rebuild itself', function () {
     forgetCachedSettings();
 
     expect(Settings::get('a'))->toBeInstanceOf(TestWrappableClass::class);
-    expect(Settings::get('a')->getSecret())
-        ->toBe('some-secret-was-unwrapped-'.TestWrappableClass::class);
+    expect(Settings::get('a')->getSecret())->toBe('some-secret-was-unwrapped');
 });
 
 it('stores a setting under a namespaced key', function () {
@@ -397,11 +396,7 @@ it('does not go back to the repository once everything is loaded', function () {
     expect(Settings::all()->toArray())->toEqual(['a' => 'A', 'b' => 'B']);
 });
 
-it('rewrites every setting on a save, not only the ones that changed', function () {
-    /*
-     * Gotcha number five, and the reason updated_at moves on rows nobody
-     * touched: save() writes the whole cache back.
-     */
+it('saves only the settings that changed, even with everything loaded', function () {
     Settings::set(['a' => 'A', 'b' => 'B']);
     Settings::save();
 
@@ -413,6 +408,50 @@ it('rewrites every setting on a save, not only the ones that changed', function 
     forgetCachedSettings();
 
     expect(Settings::all()->toArray())->toEqual(['a' => 'A', 'b' => 'B2']);
+});
+
+it('leaves a setting another process wrote while this one was reading', function () {
+    /*
+     * The write behind cache is per request, so two requests overlap all the
+     * time: this one loads everything, another one writes a setting it never
+     * touched, and this one saves. Writing the whole cache back would undo
+     * the other write - which is why save() writes only what set() touched.
+     */
+    Settings::set('a', 'A');
+    Settings::save();
+
+    forgetCachedSettings();
+    Settings::all();
+
+    $other = anotherManager();
+    $other->set('b', 'B');
+    $other->save();
+
+    Settings::set('a', 'A2');
+    Settings::save();
+
+    forgetCachedSettings();
+
+    expect(Settings::all()->toArray())->toEqual(['a' => 'A2', 'b' => 'B']);
+});
+
+it('does not delete a setting that appeared after this request read it as missing', function () {
+    /*
+     * Reading a missing key leaves a null behind in the cache. Writing that
+     * null back would be a delete, and by then the key may well exist.
+     */
+    expect(Settings::get('b'))->toBeNull();
+
+    $other = anotherManager();
+    $other->set('b', 'B');
+    $other->save();
+
+    Settings::set('a', 'A');
+    Settings::save();
+
+    forgetCachedSettings();
+
+    expect(Settings::all()->toArray())->toEqual(['a' => 'A', 'b' => 'B']);
 });
 
 /*

@@ -10,6 +10,39 @@ env:
     SETTINGS_REQUIRE_REDIS: 1
 
 jobs:
+    # Static analysis: needs no service, so it is the first thing to fail.
+    analyse:
+        name: Static analysis
+        runs-on: ubuntu-latest
+
+        steps:
+            - name: Checkout
+              uses: actions/checkout@v5
+
+            - name: Setup PHP
+              uses: shivammathur/setup-php@v2
+              with:
+                  php-version: '8.4'
+                  extensions: mbstring, pdo, pdo_sqlite, sqlite3
+                  coverage: none
+
+            - name: Locate composer cache
+              id: composer-cache
+              run: echo "dir=$(composer config cache-files-dir)" >> "$GITHUB_OUTPUT"
+
+            - name: Cache composer packages
+              uses: actions/cache@v4
+              with:
+                  path: ${{ steps.composer-cache.outputs.dir }}
+                  key: composer-${{ runner.os }}-php8.4-analyse-${{ hashFiles('composer.json') }}
+                  restore-keys: composer-${{ runner.os }}-php8.4-analyse-
+
+            - name: Install dependencies
+              run: composer update --prefer-dist --no-interaction --no-progress
+
+            - name: Run PHPStan
+              run: composer analyse
+
     # Version coverage: every supported PHP and Laravel, on sqlite.
     versions:
         name: PHP ${{ matrix.php }} / Laravel ${{ matrix.laravel }}

@@ -4,7 +4,7 @@ use Illuminate\Support\Facades\Artisan;
 use BonsaiCms\Settings\Contracts\SettingsManager;
 use BonsaiCms\Settings\Contracts\SettingsRepositoryFactory;
 use BonsaiCms\Settings\Exceptions\UnsupportedDriverException;
-use BonsaiCms\Settings\SettingsFacade as Settings;
+use BonsaiCms\Settings\Facades\Settings;
 
 /*
 |--------------------------------------------------------------------------

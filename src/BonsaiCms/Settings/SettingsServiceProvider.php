@@ -7,41 +7,53 @@ use Illuminate\Support\ServiceProvider;
 class SettingsServiceProvider extends ServiceProvider
 {
     /**
-     * Register the settings package;
-     *
-     * @return void
+     * Register the settings package.
      */
-    public function register()
+    public function register(): void
     {
         $this->mergeConfigFrom(
             __DIR__.'/../../../config/settings.php', 'settings'
         );
 
-        $implementations = config('settings.implementations');
+        $this->app->bind(
+            Contracts\SettingsSerializer::class,
+            fn ($app) => $app->make($this->implementationOf(Contracts\SettingsSerializer::class), [
+                'throwExceptions' => (bool) config('settings.throwExceptions.serialize'),
+            ])
+        );
 
-        $this->app->bind(Contracts\SettingsSerializer::class, $implementations[Contracts\SettingsSerializer::class]);
-        $this->app->bind(Contracts\SettingsDeserializer::class, $implementations[Contracts\SettingsDeserializer::class]);
+        $this->app->bind(
+            Contracts\SettingsDeserializer::class,
+            fn ($app) => $app->make($this->implementationOf(Contracts\SettingsDeserializer::class), [
+                'throwExceptions' => (bool) config('settings.throwExceptions.deserialize'),
+            ])
+        );
 
-        $this->app->singleton(Contracts\SettingsRepositoryFactory::class, $implementations[Contracts\SettingsRepositoryFactory::class]);
+        $this->app->singleton(
+            Contracts\SettingsRepositoryFactory::class,
+            fn ($app) => $app->make($this->implementationOf(Contracts\SettingsRepositoryFactory::class))
+        );
 
         /*
          * The repository is whichever driver "settings.default" names. Asking
          * the factory keeps the driver a runtime decision, so SETTINGS_DRIVER
          * (or a config change in a test) is enough to swap the backend.
          */
-        $this->app->bind(Contracts\SettingsRepository::class, function ($app) {
-            return $app->make(Contracts\SettingsRepositoryFactory::class)->driver();
-        });
+        $this->app->bind(
+            Contracts\SettingsRepository::class,
+            fn ($app) => $app->make(Contracts\SettingsRepositoryFactory::class)->driver()
+        );
 
-        $this->app->singleton(Contracts\SettingsManager::class, $implementations[Contracts\SettingsManager::class]);
+        $this->app->singleton(
+            Contracts\SettingsManager::class,
+            fn ($app) => $app->make($this->implementationOf(Contracts\SettingsManager::class))
+        );
     }
 
     /**
-     * Bootstrap the settings package;
-     *
-     * @return void
+     * Bootstrap the settings package.
      */
-    public function boot()
+    public function boot(): void
     {
         $this->publishes([
             __DIR__.'/../../../config/settings.php' => config_path('settings.php'),
@@ -56,5 +68,20 @@ class SettingsServiceProvider extends ServiceProvider
                 Commands\DeleteAllSettingsCommand::class,
             ]);
         }
+    }
+
+    /**
+     * The class an application has picked for one of the seams.
+     *
+     * Read at bind time rather than once in register(), so a config change
+     * made after the provider ran still takes effect - which is what lets a
+     * test swap a piece without rebuilding the container.
+     *
+     * @param  class-string  $contract
+     * @return class-string
+     */
+    protected function implementationOf(string $contract): string
+    {
+        return config("settings.bindings.{$contract}");
     }
 }

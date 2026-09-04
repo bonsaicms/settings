@@ -3,13 +3,21 @@
 namespace BonsaiCms\Settings;
 
 use Throwable;
-use Illuminate\Support\Facades\Config;
 use BonsaiCms\Settings\Exceptions\DeserializeException;
 use BonsaiCms\Settings\Contracts\SettingsDeserializer as SettingsDeserializerContract;
 
 class SettingsDeserializer implements SettingsDeserializerContract
 {
-    public function deserialize($value)
+    /**
+     * See SettingsSerializer for why this is handed in rather than read from
+     * config() here.
+     */
+    public function __construct(
+        protected readonly bool $throwExceptions = false
+    ) {
+    }
+
+    public function deserialize(?string $value): mixed
     {
         try {
             if ($value === null) {
@@ -22,7 +30,7 @@ class SettingsDeserializer implements SettingsDeserializerContract
                 throw new DeserializeException('The stored value is not valid base64.');
             }
 
-            $value = $this->unserialize($serialized);
+            $unserialized = $this->unserialize($serialized);
 
             /*
              * unserialize() answers false both for a stored false and for
@@ -31,19 +39,13 @@ class SettingsDeserializer implements SettingsDeserializerContract
              * is what keeps a damaged entry from coming back as false - which
              * is not null, so has() would report a missing setting as present.
              */
-            if ($value === false && $serialized !== serialize(false)) {
+            if ($unserialized === false && $serialized !== serialize(false)) {
                 throw new DeserializeException('The stored value could not be unserialized.');
             }
 
-            if ($value === null) {
-                return null;
-            }
-
-            if ($value instanceof SerializationWrapper) {
-                $value = $value->unwrap();
-            }
-
-            return $value;
+            return ($unserialized instanceof SerializationWrapper)
+                ? $unserialized->unwrap()
+                : $unserialized;
         } catch (Throwable $e) {
             /*
              * Throwable and not Exception: unwrapping a value whose class has
@@ -51,7 +53,7 @@ class SettingsDeserializer implements SettingsDeserializerContract
              * down over one unreadable setting is exactly what this swallowing
              * is here to avoid.
              */
-            if (Config::get('settings.throwExceptions.deserialize')) {
+            if ($this->throwExceptions) {
                 throw ($e instanceof DeserializeException)
                     ? $e
                     : new DeserializeException($e->getMessage(), 0, $e);
@@ -69,11 +71,9 @@ class SettingsDeserializer implements SettingsDeserializerContract
      * instead of leaving it to the host is what makes the answer the same
      * either way.
      */
-    protected function unserialize(string $serialized)
+    protected function unserialize(string $serialized): mixed
     {
-        set_error_handler(static function () {
-            return true;
-        });
+        set_error_handler(static fn () => true);
 
         try {
             return unserialize($serialized);

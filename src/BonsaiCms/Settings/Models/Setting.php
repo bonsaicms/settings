@@ -4,6 +4,10 @@ namespace BonsaiCms\Settings\Models;
 
 use Illuminate\Database\Eloquent\Model;
 
+/**
+ * @property string $key
+ * @property string $value
+ */
 class Setting extends Model
 {
     /**
@@ -41,7 +45,7 @@ class Setting extends Model
     /**
      * The attributes that are mass assignable.
      *
-     * @var array
+     * @var list<string>
      */
     protected $fillable = ['key', 'value'];
 }

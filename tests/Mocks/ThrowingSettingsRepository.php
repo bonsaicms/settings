@@ -14,37 +14,37 @@ use BonsaiCms\Settings\Contracts\SettingsRepository;
  */
 class ThrowingSettingsRepository implements SettingsRepository
 {
-    public function setItem(string $key, $value) : void
+    public function setItem(string $key, ?string $value): void
     {
         static::fail('setItem');
     }
 
-    public function setItems(array $items) : void
+    public function setItems(array $items): void
     {
         static::fail('setItems');
     }
 
-    public function getItem(string $key)
+    public function getItem(string $key): ?string
     {
         static::fail('getItem');
     }
 
-    public function getItems(array $keys) : array
+    public function getItems(array $keys): array
     {
         static::fail('getItems');
     }
 
-    public function getAll() : array
+    public function getAll(): array
     {
         static::fail('getAll');
     }
 
-    public function deleteAll() : void
+    public function deleteAll(): void
     {
         static::fail('deleteAll');
     }
 
-    protected static function fail(string $method) : void
+    protected static function fail(string $method): never
     {
         throw new RuntimeException(
             "The settings manager reached the repository through {$method}(), "

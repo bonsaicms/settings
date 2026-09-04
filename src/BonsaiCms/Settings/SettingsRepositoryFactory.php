@@ -18,34 +18,27 @@ use BonsaiCms\Settings\Exceptions\UnsupportedDriverException;
  */
 class SettingsRepositoryFactory implements Contracts\SettingsRepositoryFactory
 {
-    protected $container;
-
-    protected $config;
-
     /**
      * Resolved drivers, keyed by driver name.
      *
      * @var array<string, Contracts\SettingsRepository>
      */
-    protected $drivers = [];
+    protected array $drivers = [];
 
-    public function __construct(Container $container, Config $config)
-    {
-        $this->container = $container;
-        $this->config = $config;
+    public function __construct(
+        protected readonly Container $container,
+        protected readonly Config $config
+    ) {
     }
 
-    public function driver(?string $name = null) : Contracts\SettingsRepository
+    public function driver(?string $name = null): Contracts\SettingsRepository
     {
         $name = $name ?: $this->getDefaultDriver();
 
         return $this->drivers[$name] ??= $this->resolve($name);
     }
 
-    /**
-     * The driver used when nothing is asked for by name.
-     */
-    public function getDefaultDriver() : string
+    public function getDefaultDriver(): string
     {
         /*
          * Not the second argument of get(): that one only applies to a key
@@ -56,20 +49,16 @@ class SettingsRepositoryFactory implements Contracts\SettingsRepositoryFactory
         return $this->config->get('settings.default') ?: 'database';
     }
 
-    /**
-     * Forget the resolved instances, so the next driver() call rebuilds them
-     * from the current configuration.
-     */
-    public function forgetDrivers() : void
+    public function forgetDrivers(): void
     {
         $this->drivers = [];
     }
 
-    protected function resolve(string $name) : Contracts\SettingsRepository
+    protected function resolve(string $name): Contracts\SettingsRepository
     {
         $config = $this->config->get("settings.drivers.{$name}");
 
-        if ( ! is_array($config)) {
+        if (! is_array($config)) {
             throw UnsupportedDriverException::undefined($name);
         }
 
@@ -81,7 +70,7 @@ class SettingsRepositoryFactory implements Contracts\SettingsRepositoryFactory
 
         $implementation = $this->config->get("settings.driver_implementations.{$type}");
 
-        if ( ! $implementation) {
+        if (! $implementation) {
             throw UnsupportedDriverException::unknownType($name, $type);
         }
 

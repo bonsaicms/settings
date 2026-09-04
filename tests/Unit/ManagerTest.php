@@ -450,10 +450,12 @@ it('saves a deletion as a null value, without serializing it', function () {
     $this->manager->save();
 });
 
-it('writes back the whole cache and not only what changed', function () {
+it('writes back only what changed, not the whole cache', function () {
     /*
-     * A documented consequence of the write behind design: after all(), every
-     * setting is rewritten - and its updated_at bumped - by the next save().
+     * The cache holds every setting after an all(), but a save() has no
+     * business rewriting the ones nobody touched: it would bump their
+     * updated_at, and two requests that each changed one setting would undo
+     * each other.
      */
     $this->settingsRepository
         ->shouldReceive('getAll')->once()->andReturn(['a' => 'A-ser']);
@@ -464,13 +466,57 @@ it('writes back the whole cache and not only what changed', function () {
     $this->manager->set('b', 'B');
 
     $this->settingsSerializer
-        ->shouldReceive('serialize')->with('A')->once()->andReturn('A-ser');
+        ->shouldReceive('serialize')->with('A')->never();
     $this->settingsSerializer
         ->shouldReceive('serialize')->with('B')->once()->andReturn('B-ser');
 
     $this->settingsRepository
-        ->shouldReceive('setItems')->with(['a' => 'A-ser', 'b' => 'B-ser'])->once();
+        ->shouldReceive('setItem')->with('b', 'B-ser')->once();
 
+    $this->manager->save();
+});
+
+it('does not write back a key it only read and did not find', function () {
+    /*
+     * Reading a missing key leaves a null in the cache so the next read stays
+     * query free. Writing that null back would delete the key - which is not
+     * hypothetical: another request may have created it in the meantime.
+     */
+    $this->settingsRepository
+        ->shouldReceive('getItem')->with('missing')->once()->andReturn(null);
+
+    $this->manager->get('missing');
+    $this->manager->set('a', 'A');
+
+    $this->settingsSerializer
+        ->shouldReceive('serialize')->with('A')->once()->andReturn('A-ser');
+
+    $this->settingsRepository
+        ->shouldReceive('setItem')->with('a', 'A-ser')->once();
+
+    $this->manager->save();
+});
+
+it('forgets what it wrote, so a second save writes nothing', function () {
+    $this->settingsSerializer
+        ->shouldReceive('serialize')->with('A')->once()->andReturn('A-ser');
+    $this->settingsRepository
+        ->shouldReceive('setItem')->with('a', 'A-ser')->once();
+
+    $this->manager->set('a', 'A');
+    $this->manager->save();
+    $this->manager->save();
+});
+
+it('writes a key back once however many times it was set', function () {
+    $this->settingsSerializer
+        ->shouldReceive('serialize')->with('A2')->once()->andReturn('A2-ser');
+
+    $this->settingsRepository
+        ->shouldReceive('setItem')->with('a', 'A2-ser')->once();
+
+    $this->manager->set('a', 'A');
+    $this->manager->set('a', 'A2');
     $this->manager->save();
 });
 

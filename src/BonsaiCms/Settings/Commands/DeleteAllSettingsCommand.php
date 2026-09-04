@@ -23,37 +23,22 @@ class DeleteAllSettingsCommand extends Command
      */
     protected $description = 'Delete all settings';
 
-    protected $settingsManager;
-
-    protected $repositoryFactory;
-
-    /**
-     * Create a new command instance.
-     *
-     * @return void
-     */
-    public function __construct(SettingsManager $settingsManager, SettingsRepositoryFactory $repositoryFactory)
-    {
+    public function __construct(
+        protected readonly SettingsManager $settingsManager,
+        protected readonly SettingsRepositoryFactory $repositoryFactory
+    ) {
         parent::__construct();
-
-        $this->settingsManager = $settingsManager;
-        $this->repositoryFactory = $repositoryFactory;
     }
 
-    /**
-     * Execute the console command.
-     *
-     * @return int
-     */
-    public function handle()
+    public function handle(): int
     {
         $driver = $this->option('driver');
 
-        if ($driver) {
+        if (is_string($driver) && $driver !== '') {
             /*
              * Named driver: go straight to the repository. The manager holds
-             * the default driver, so its in memory cache is none of this
-             * command's business.
+             * the default driver, so this command has no business emptying
+             * its in memory cache.
              */
             $this->repositoryFactory->driver($driver)->deleteAll();
         } else {
@@ -62,6 +47,6 @@ class DeleteAllSettingsCommand extends Command
 
         $this->info('Settings were successfully deleted.');
 
-        return 0;
+        return static::SUCCESS;
     }
 }

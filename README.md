@@ -136,7 +136,7 @@ Every method is available on the `Settings` facade, on `settings()`, and on the 
 | `get(array $keys): Collection` | Read many; the result always contains **every** requested key, in the order asked for, missing ones as `null`. |
 | `has(string $key): bool` | `get($key) !== null`. |
 | `all(): Collection` | Every setting, keyed by name. Loads the full set from the repository once, then serves from memory. |
-| `save(): void` | Persist the whole cache to the repository. |
+| `save(): void` | Persist everything `set()` has touched since the last save. |
 | `deleteAll(): void` | Delete every setting. **Applied immediately**, no `save()` needed. |
 | `refresh(): void` | Drop the in-memory cache, **discarding unsaved changes**. |
 | `isDirty(): bool` | Whether anything has been `set()` since the last `save()`. |
@@ -147,7 +147,7 @@ Every method is available on the `Settings` facade, on `settings()`, and on the 
 ### Examples
 
 ```php
-use BonsaiCms\Settings\SettingsFacade as Settings;
+use BonsaiCms\Settings\Facades\Settings;
 
 Settings::set('count', 1);
 Settings::get('count');              // 1
@@ -179,16 +179,16 @@ Settings::save();
 
 ## Storing Eloquent models
 
-Add the `SerializableModelTrait` to the model and declare the `SerializationWrappable` interface:
+Add the `SerializableModel` trait to the model and declare the `SerializationWrappable` interface:
 
 ```php
 use Illuminate\Database\Eloquent\Model;
+use BonsaiCms\Settings\Concerns\SerializableModel;
 use BonsaiCms\Settings\Contracts\SerializationWrappable;
-use BonsaiCms\Settings\Models\SerializableModelTrait;
 
 class MyModel extends Model implements SerializationWrappable
 {
-    use SerializableModelTrait;
+    use SerializableModel;
 }
 ```
 
@@ -219,14 +219,14 @@ Any class can implement `BonsaiCms\Settings\Contracts\SerializationWrappable`:
 ```php
 interface SerializationWrappable
 {
-    static function wrapBeforeSerialization($wrappable);
+    public function wrapBeforeSerialization(): mixed;
 
-    static function unwrapAfterSerialization($wrappedClass, $wrappedValue);
+    public static function unwrapAfterSerialization(mixed $wrappedValue): mixed;
 }
 ```
 
-- `wrapBeforeSerialization($object)` receives the object and returns a **primitive payload** (string, number, array …) that describes it. This payload is what gets serialized.
-- `unwrapAfterSerialization($class, $payload)` receives the class name and that payload back, and returns the reconstructed object.
+- `wrapBeforeSerialization()` returns a **primitive payload** (string, number, array …) describing the object. This payload is what gets serialized, alongside the class name.
+- `unwrapAfterSerialization($payload)` receives that payload back on the class it was stored for, and returns the reconstructed object.
 
 ```php
 use BonsaiCms\Settings\Contracts\SerializationWrappable;
@@ -238,15 +238,15 @@ class Money implements SerializationWrappable
         public readonly string $currency,
     ) {}
 
-    static function wrapBeforeSerialization($wrappable)
+    public function wrapBeforeSerialization(): mixed
     {
         return [
-            'amount' => $wrappable->amount,
-            'currency' => $wrappable->currency,
+            'amount' => $this->amount,
+            'currency' => $this->currency,
         ];
     }
 
-    static function unwrapAfterSerialization($wrappedClass, $wrappedValue)
+    public static function unwrapAfterSerialization(mixed $wrappedValue): mixed
     {
         return new Money($wrappedValue['amount'], $wrappedValue['currency']);
     }
@@ -404,7 +404,7 @@ Schema: `key` — `varchar(255)`, primary key; `value` — `text`, not null; plu
 ### Swapping implementations
 
 ```php
-'implementations' => [
+'bindings' => [
     BonsaiCms\Settings\Contracts\SettingsManager::class           => BonsaiCms\Settings\SettingsManager::class,
     BonsaiCms\Settings\Contracts\SettingsSerializer::class        => BonsaiCms\Settings\SettingsSerializer::class,
     BonsaiCms\Settings\Contracts\SettingsDeserializer::class      => BonsaiCms\Settings\SettingsDeserializer::class,
@@ -412,7 +412,9 @@ Schema: `key` — `varchar(255)`, primary key; `value` — `text`, not null; plu
 ],
 ```
 
-Every seam in the package is an interface bound from this array at `register()` time, so replacing any piece is a one-line config change. `SettingsRepository` is not in the list: it is bound to whichever driver `default` names.
+Every seam in the package is an interface bound to the class named here, read when the binding is resolved, so replacing any piece is a one-line config change. `SettingsRepository` is not in the list: it is bound to whichever driver `default` names.
+
+Not to be confused with `driver_implementations`, which maps a *storage type* to a repository class.
 
 ### Exceptions
 
@@ -442,21 +444,20 @@ Five contracts in `src/BonsaiCms/Settings/Contracts/` are the extension points. 
 ```
 src/BonsaiCms/Settings/
 ├── Commands/DeleteAllSettingsCommand.php   php artisan settings:delete-all
+├── Concerns/SerializableModel.php          makes your models storable by identity
 ├── Contracts/                              the five seams + SerializationWrappable
-├── Exceptions/                             SerializeException, DeserializeException, …
+├── Exceptions/                             SettingsException and its three subclasses
+├── Facades/Settings.php                    the Settings facade
 ├── Http/Middleware/                        LoadSettings, SaveSettings
-├── Models/
-│   ├── Setting.php                         the Eloquent model behind the database driver
-│   └── SerializableModelTrait.php          makes your models storable by identity
+├── Models/Setting.php                      the Eloquent model behind the database driver
 ├── Repositories/                           Database, Redis, File and Array repositories
 ├── SerializationWrapper.php                class name + primitive payload envelope
-├── SettingsManager.php                     the cache, the dirty flag, the API
+├── SettingsManager.php                     the cache, the dirty keys, the API
 ├── SettingsRepositoryFactory.php           driver name → repository
 ├── SettingsSerializer.php                  serialize() + base64_encode()
 ├── SettingsDeserializer.php                base64_decode() + unserialize()
-├── SettingsFacade.php                      the Settings facade
 └── SettingsServiceProvider.php             config-driven bindings, publishing, command
-config/settings.php                         drivers, implementations, throwExceptions
+config/settings.php                         drivers, bindings, throwExceptions
 database/migrations/                        publishable migration for the settings table
 helpers/helpers.php                         the settings() helper, composer files autoload
 ```
@@ -469,7 +470,7 @@ Behaviours that are easy to get wrong — worth reading whether you are writing 
 2. **`deleteAll()` is the exception** — it hits the repository immediately and does not wait for `save()`.
 3. **You cannot store `null`.** Setting a key to `null` deletes it; reading a missing key gives `null`. Use a sentinel of your own if you need to distinguish "absent" from "explicitly empty".
 4. **`refresh()` throws away unsaved changes.** It resets the cache and clears the dirty flag.
-5. **`save()` writes the whole cache**, so after `all()` + `save()` every row is rewritten (and its `updated_at` bumped), not just the ones you changed.
+5. **`save()` writes only what you `set()`.** Keys that were merely read — including by `all()` — are left alone, so a request that changes one setting cannot undo another request's changes to the rest.
 6. **`get(array $keys)` never omits keys.** Missing ones come back as `null`, so the result count always matches the request, and the order matches too.
 7. **Serialization errors are silent in production.** With `APP_DEBUG=false` a failed serialize/deserialize yields `null` rather than an exception — see [Exceptions](#exceptions).
 8. **The stored format is PHP-specific.** `serialize()` output is not readable by other languages, and changing the serializer breaks settings already stored in the wild.

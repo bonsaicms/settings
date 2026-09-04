@@ -1,7 +1,7 @@
 <?php
 
 use BonsaiCms\Settings\Contracts;
-use BonsaiCms\Settings\SettingsFacade;
+use BonsaiCms\Settings\Facades\Settings as SettingsFacade;
 use BonsaiCms\Settings\SettingsManager;
 use BonsaiCms\Settings\SettingsSerializer;
 use BonsaiCms\Settings\SettingsDeserializer;
@@ -13,7 +13,7 @@ use BonsaiCms\Settings\SettingsServiceProvider;
 | The service provider wiring
 |--------------------------------------------------------------------------
 |
-| Every seam of the package is an interface bound from the "implementations"
+| Every seam of the package is an interface bound from the "bindings"
 | config at register() time. What is asserted here is that each of them is
 | bound, that the two stateful ones are singletons, and that swapping a class
 | in the config really is all it takes to replace a piece.
@@ -23,11 +23,11 @@ use BonsaiCms\Settings\SettingsServiceProvider;
 it('merges its config into the application', function () {
     expect(config('settings.drivers'))->toBeArray();
     expect(config('settings.driver_implementations'))->toBeArray();
-    expect(config('settings.implementations'))->toBeArray();
+    expect(config('settings.bindings'))->toBeArray();
     expect(config('settings.migrations.driver'))->toBe('database');
 });
 
-it('binds every contract in the implementations config', function (string $contract, string $implementation) {
+it('binds every contract in the bindings config', function (string $contract, string $implementation) {
     expect(app($contract))->toBeInstanceOf($implementation);
 })->with([
     'manager' => [Contracts\SettingsManager::class, SettingsManager::class],
@@ -70,23 +70,53 @@ it('registers the Settings alias', function () {
 
 it('lets the application swap an implementation from the config', function () {
     /*
-     * The provider reads "settings.implementations" in register(), so this
-     * registers it again with the config changed - which is what an
-     * application publishing the config file effectively does at boot.
+     * "settings.bindings" is read when the binding is resolved rather than
+     * when it is registered, so an application that publishes the config file
+     * gets its own class without having to touch the container.
      */
     config()->set(
-        'settings.implementations.'.Contracts\SettingsSerializer::class,
+        'settings.bindings.'.Contracts\SettingsSerializer::class,
         SerializerOfMyOwn::class
     );
-
-    (new SettingsServiceProvider(app()))->register();
 
     expect(app(Contracts\SettingsSerializer::class))->toBeInstanceOf(SerializerOfMyOwn::class);
 });
 
+it('does not force a replacement to accept the arguments ours takes', function () {
+    /*
+     * The provider hands the serializer its throwExceptions flag by name, and
+     * SerializerOfMyOwn has no such argument - a replacement is only ever
+     * asked to honour the contract.
+     */
+    config()->set(
+        'settings.bindings.'.Contracts\SettingsSerializer::class,
+        SerializerOfMyOwn::class
+    );
+    config()->set('settings.throwExceptions.serialize', true);
+
+    expect(app(Contracts\SettingsSerializer::class)->serialize('anything'))->toBe('whatever');
+});
+
+it('hands the serializers their failure reporting flag from the config', function (string $contract, string $option) {
+    /*
+     * The flag reaches them through the constructor rather than being read
+     * from config() inside, so this wiring is the only place that knows the
+     * two belong together.
+     */
+    config()->set("settings.throwExceptions.{$option}", true);
+
+    $instance = app($contract);
+
+    expect((new ReflectionProperty($instance, 'throwExceptions'))->getValue($instance))
+        ->toBeTrue();
+})->with([
+    'serializer' => [Contracts\SettingsSerializer::class, 'serialize'],
+    'deserializer' => [Contracts\SettingsDeserializer::class, 'deserialize'],
+]);
+
 it('lets the application swap the manager itself', function () {
     config()->set(
-        'settings.implementations.'.Contracts\SettingsManager::class,
+        'settings.bindings.'.Contracts\SettingsManager::class,
         ManagerOfMyOwn::class
     );
 
@@ -101,7 +131,7 @@ it('lets the application swap the manager itself', function () {
 
 class SerializerOfMyOwn implements Contracts\SettingsSerializer
 {
-    public function serialize($deserializedValue)
+    public function serialize(mixed $value): ?string
     {
         return 'whatever';
     }

@@ -4,29 +4,25 @@ namespace Tests\Mocks;
 
 use BonsaiCms\Settings\Contracts\SerializationWrappable;
 
-class TestWrappableClass implements SerializationWrappable
+final class TestWrappableClass implements SerializationWrappable
 {
-    protected $secret;
-
-    public function __construct($secret)
-    {
-        $this->secret = $secret;
+    public function __construct(
+        protected mixed $secret
+    ) {
     }
 
-    public function getSecret()
+    public function getSecret(): mixed
     {
         return $this->secret;
     }
 
-    public static function wrapBeforeSerialization($object)
+    public function wrapBeforeSerialization(): mixed
     {
-        return [
-            'secret' => $object->getSecret(),
-        ];
+        return ['secret' => $this->secret];
     }
 
-    public static function unwrapAfterSerialization($wrappedClass, $wrappedValue)
+    public static function unwrapAfterSerialization(mixed $wrappedValue): mixed
     {
-        return new static($wrappedValue['secret'] . '-was-unwrapped-' . $wrappedClass);
+        return new static($wrappedValue['secret'].'-was-unwrapped');
     }
 }

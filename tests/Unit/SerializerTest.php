@@ -86,21 +86,17 @@ it('never puts the wrapped object graph into the stored string', function () {
 */
 
 it('swallows a value it cannot serialize and stores nothing', function () {
-    // The default: config('settings.throwExceptions.serialize') is off
+    // The default: the provider only turns this on under APP_DEBUG
     expect($this->serializer->serialize(new UnserializableClass))->toBeNull();
 });
 
 it('throws when the application asked to be told about serialization failures', function () {
-    config()->set('settings.throwExceptions.serialize', true);
-
-    $this->serializer->serialize(new UnserializableClass);
+    (new SettingsSerializer(throwExceptions: true))->serialize(new UnserializableClass);
 })->throws(SerializeException::class);
 
 it('keeps the original failure as the previous exception', function () {
-    config()->set('settings.throwExceptions.serialize', true);
-
     try {
-        $this->serializer->serialize(new UnserializableClass);
+        (new SettingsSerializer(throwExceptions: true))->serialize(new UnserializableClass);
     } catch (SerializeException $e) {
         expect($e->getPrevious())->toBeInstanceOf(Throwable::class);
         expect($e->getMessage())->toContain('Closure');

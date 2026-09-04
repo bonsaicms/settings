@@ -26,11 +26,21 @@ php vendor/bin/pest --filter "round trips primitives"
 
 `php` and `composer` come from Herd (`C:\Users\mspid\.config\herd\bin`) and are on PATH in PowerShell but **not** in the bundled bash shell — run test commands from PowerShell, prefixed with `php` (e.g. `php vendor/bin/pest`).
 
-Run one suite with `php vendor/bin/pest --testsuite Unit` (or `Feature`); both are registered in [phpunit.xml](phpunit.xml), which is on the current PHPUnit schema. There is no lint or static-analysis tooling in this repo.
+Run one suite with `php vendor/bin/pest --testsuite Unit` (or `Feature`); both are registered in [phpunit.xml](phpunit.xml), which is on the current PHPUnit schema.
+
+```bash
+composer analyse
+```
+
+PHPStan (through larastan) at **level 8**, configured in [phpstan.neon.dist](phpstan.neon.dist) and run as its own CI job. It covers `src`, `config`, `database`, `helpers` and `tests/Mocks` — the Pest suite itself is left out because Pest binds `$this` inside test closures at runtime, which PHPStan cannot model. Keep it green: the contracts are typed down to `?string`, and the analysis is what holds that. There is no code-style tooling; follow the surrounding style (`! $x` with a space, `fn ()` short closures, `: void` tight against the parenthesis).
 
 ## Architecture
 
-Five contracts in `src/BonsaiCms/Settings/Contracts/` are the seams; every implementation is swappable via [config/settings.php](config/settings.php) `implementations`, which [SettingsServiceProvider](src/BonsaiCms/Settings/SettingsServiceProvider.php) reads at `register()` time to bind them. **Add a new interface → add a binding + a config entry; never `new` an implementation across layer boundaries.**
+Five contracts in `src/BonsaiCms/Settings/Contracts/` are the seams; every implementation is swappable via [config/settings.php](config/settings.php) `bindings`, which [SettingsServiceProvider](src/BonsaiCms/Settings/SettingsServiceProvider.php) reads **when the binding is resolved**, not when it is registered — so a config change takes effect without rebuilding the container. **Add a new interface → add a binding + a config entry; never `new` an implementation across layer boundaries.**
+
+Don't confuse `bindings` (contract → class, the package's own wiring) with `driver_implementations` (storage type → repository).
+
+The contracts are fully typed, and that is load-bearing: `SettingsRepository` speaks `?string` in both directions, so "a repository only ever handles the serialized string, and null means absent" is enforced by PHP rather than by a comment.
 
 - `SettingsManager` — bound as a **singleton**; the only stateful piece.
 - `SettingsRepositoryFactory` — a **singleton**; turns a driver name into a repository.
@@ -39,7 +49,7 @@ Five contracts in `src/BonsaiCms/Settings/Contracts/` are the seams; every imple
 
 ### Drivers
 
-Storage is configured the way Laravel configures cache stores: `settings.default` names one entry of `settings.drivers`, and each entry has a `driver` **type** plus that implementation's own config. The type maps to a class through `settings.driver_implementations`. Two entries may share a type and differ only in config — two Redis drivers on two hashes, two database drivers on two tables — which is why **repositories take their config as a constructor `array $config` and must never read `config()` themselves**.
+Storage is configured the way Laravel configures cache stores: `settings.default` names one entry of `settings.drivers`, and each entry has a `driver` **type** plus that implementation's own config. The type maps to a class through `settings.driver_implementations`. Two entries may share a type and differ only in config — two Redis drivers on two hashes, two database drivers on two tables — which is why **repositories take their config as a constructor `array $config` and must never read `config()` themselves**. (`ArraySettingsRepository` is the exception: it has nothing to configure, so it takes no `$config` at all — the factory passes the array by name, and a constructor that does not ask for it never sees it.) `SettingsSerializer` / `SettingsDeserializer` follow the same rule: their `throwExceptions` flag is handed in by the provider, not read from `config()` inside.
 
 | type | class | config keys |
 |---|---|---|
@@ -58,12 +68,14 @@ Only the `database` driver needs the migration; `settings.migrations.driver` nam
 
 ### The write-behind cache in SettingsManager
 
-[SettingsManager](src/BonsaiCms/Settings/SettingsManager.php) holds an in-memory `Collection` cache plus two flags that drive nearly all of its logic:
+[SettingsManager](src/BonsaiCms/Settings/SettingsManager.php) holds an in-memory `Collection` cache plus two pieces of state that drive nearly all of its logic:
 
 - `$loadedAll` — set by `all()`. Once true, `getOne`/`getMany` **never** hit the repository again; a cache miss means the key genuinely does not exist. This is why the `LoadSettings` middleware makes subsequent `get()` calls query-free.
-- `$dirty` — set by any `set()`. `SaveSettings` middleware only calls `save()` when dirty.
+- `$dirtyKeys` — a `key => true` map, added to by every `set()` and emptied by `save()`. `isDirty()` is `$dirtyKeys !== []`, and `SaveSettings` middleware only calls `save()` when dirty.
 
-Values are held **deserialized** in the cache and serialized only in `save()`, which writes the *entire* cache back (single `setItem` when one entry, `setItems`/upsert otherwise). Nothing is persisted until `save()` runs.
+Values are held **deserialized** in the cache and serialized only in `save()`, which writes back **only the dirty keys** (single `setItem` when one, `setItems`/upsert otherwise). Nothing is persisted until `save()` runs.
+
+Writing only the dirty keys is deliberate and was once not the case. Writing the whole cache back meant that after an `all()` every setting was rewritten, so two overlapping requests each changing one setting would undo each other — and a key this request had only *read* and found missing sat in the cache as a null, which on save became a delete of a key someone else may since have created. `tests/Unit/ManagerTest.php` and `tests/Feature/SettingsTest.php` both pin this; don't "simplify" `save()` back to writing `$this->cache`.
 
 `null` is the "absent" sentinel throughout: `has()` is `get() !== null`, serializers short-circuit on null, and *every* repository **drops** entries whose value is null rather than storing them — a deleted row, an `HDEL`, a key removed from the JSON. Keep that invariant when touching any of these; a driver that stores a null would make `has()` report a missing setting as present. It cuts both ways: `getOne`/`getMany` cache a null for a key that turned out not to exist (so reading it again is query-free), and `all()` therefore has to **filter those out** — the negative cache is an implementation detail, not a setting.
 
@@ -73,7 +85,9 @@ Every repository method returns the raw serialized **string**, never a `Setting`
 
 ### Serialization of objects
 
-`serialize()` + `base64_encode()` into a `text` column. Objects implementing `Contracts\SerializationWrappable` are first wrapped in [SerializationWrapper](src/BonsaiCms/Settings/SerializationWrapper.php), which stores only the class name (`$c`) and a primitive payload (`$d`) — deliberately one-letter properties to keep the serialized string short. `unwrap()` calls the class's static `unwrapAfterSerialization()`. `Models\SerializableModelTrait` implements this for Eloquent by storing just the primary key and re-`find()`ing on read, so **model attributes are never serialized**.
+`serialize()` + `base64_encode()` into a `text` column. Objects implementing `Contracts\SerializationWrappable` are first wrapped in [SerializationWrapper](src/BonsaiCms/Settings/SerializationWrapper.php), which stores only the class name (`$c`) and a primitive payload (`$d`) — deliberately one-letter properties to keep the serialized string short. The interface is an *instance* `wrapBeforeSerialization()` plus a *static* `unwrapAfterSerialization($payload)`; the class name is not passed back, because `unwrap()` calls the method on that very class. `Concerns\SerializableModel` implements this for Eloquent by storing just the primary key and re-`find()`ing on read, so **model attributes are never serialized**.
+
+An envelope outlives the code that wrote it, so `SerializationWrapper::unwrap()` — not the wrappable classes — is where the "class renamed, removed, or no longer wrappable" guard lives, throwing `DeserializeException` before it calls anything.
 
 Serializer/deserializer failures are swallowed and return `null` unless `settings.throwExceptions.*` is on (defaults to `env('APP_DEBUG')`). Both catch `Throwable`, not `Exception` — unwrapping a value whose class has since been renamed raises an `Error`, and one unreadable setting must not take the application down.
 
@@ -82,7 +96,7 @@ Serializer/deserializer failures are swallowed and return `null` unless `setting
 ### Registration details
 
 - `helpers/helpers.php` is in composer's `files` autoload, so `settings()` exists before any provider boots. It was `require_once`d from the provider's `boot()` until the Laravel 12/13 major, which made it order-dependent against other packages. Keep the `function_exists` guard: it is what stops a colliding `settings()` from another package from fataling.
-- The `settings()` helper overloads on argument shape: an array with sequential integer keys is a multi-get, an associative array is a multi-set. See [helpers/helpers.php](helpers/helpers.php).
+- The `settings()` helper overloads on argument shape: `array_is_list()` decides — a list is a multi-get, anything else with keys is a multi-set. PHP casts the key `'0'` to `0`, so `['0' => 'theme']` is a multi-get of the key `theme`; that is pinned by a test, not a bug to fix. See [helpers/helpers.php](helpers/helpers.php).
 - `Models\Setting` is a plain model with a `bonsaicms_settings` fallback table. It does **not** read config: `DatabaseSettingsRepository` calls `setConnection()`/`setTable()` on a fresh instance per query, which is what lets one model class serve several database drivers.
 - The migration is **not** registered with the application. It is published with `publishesMigrations()` under the `settings-migrations` tag (config under `settings-config`, both under `settings`), so the host app owns and can edit it. [tests/FeatureTestCase.php](tests/FeatureTestCase.php) therefore loads it itself in `defineDatabaseMigrations()` — feature tests get the table from there, not from the provider.
 
@@ -122,6 +136,6 @@ Everything in `tests/Feature` is **driver agnostic** — keep it that way, and p
 | `REDIS_HOST`/`REDIS_PORT`, `REDIS_CLIENT` | `predis` (default) or `phpredis` — they disagree on what `HMGET` returns and on how a missing field is reported, so both matter |
 | `SETTINGS_REQUIRE_REDIS` | turns "no Redis, skip" into a failure |
 
-Without a Redis running, the Redis tests **skip** so `composer test` still works on a bare machine. CI sets `SETTINGS_REQUIRE_REDIS=1` precisely so that skip cannot hide a broken driver. [.github/workflows/tests.yml](.github/workflows/tests.yml) has three jobs: `versions` (each PHP × Laravel on sqlite), `drivers` (whole suite once per `SETTINGS_DRIVER`, plus Redis on both clients) and `databases` (the database driver against real PostgreSQL, MariaDB and MySQL, because the upsert SQL is not the same on every engine and sqlite would never show it).
+Without a Redis running, the Redis tests **skip** so `composer test` still works on a bare machine. CI sets `SETTINGS_REQUIRE_REDIS=1` precisely so that skip cannot hide a broken driver. [.github/workflows/tests.yml](.github/workflows/tests.yml) has four jobs: `analyse` (PHPStan, needs no service so it fails first), `versions` (each PHP × Laravel on sqlite), `drivers` (whole suite once per `SETTINGS_DRIVER`, plus Redis on both clients) and `databases` (the database driver against real PostgreSQL, MariaDB and MySQL, because the upsert SQL is not the same on every engine and sqlite would never show it).
 
 Most serializer tests assert round-trips through `SettingsDeserializer` rather than against fixed strings. Two do not, deliberately: `SerializerTest`'s "stores a value as base64 encoded php serialization" and `DeserializerTest`'s "reads back a value stored by an earlier version of the package" hold literal strings, because a round-trip keeps passing when the format changes on both sides at once — and changing it makes every setting already stored in the wild unreadable. Editing those literals is a deliberate act that needs a migration path, not a detail of some refactor.

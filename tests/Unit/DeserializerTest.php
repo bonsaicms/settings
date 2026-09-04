@@ -99,7 +99,7 @@ it('unwraps an envelope back into the object it describes', function () {
 
     expect($deserialized)->toBeInstanceOf(TestWrappableClass::class);
     expect($deserialized->getSecret())
-        ->toBe('some-secret-was-unwrapped-'.TestWrappableClass::class);
+        ->toBe('some-secret-was-unwrapped');
 });
 
 it('does not wrap a wrappable object that is nested inside another value', function () {
@@ -158,16 +158,14 @@ it('reads a damaged value without raising a php warning', function () {
 });
 
 it('throws when the application asked to be told about deserialization failures', function () {
-    config()->set('settings.throwExceptions.deserialize', true);
-
-    $this->deserializer->deserialize(base64_encode('just some text'));
+    (new SettingsDeserializer(throwExceptions: true))
+        ->deserialize(base64_encode('just some text'));
 })->throws(DeserializeException::class);
 
 it('throws when an envelope names a class that no longer exists', function () {
-    config()->set('settings.throwExceptions.deserialize', true);
-
-    $this->deserializer->deserialize(storedWrapperForAMissingClass());
-})->throws(DeserializeException::class);
+    (new SettingsDeserializer(throwExceptions: true))
+        ->deserialize(storedWrapperForAMissingClass());
+})->throws(DeserializeException::class, 'no longer exists');
 
 it('swallows a missing class rather than taking the application down', function () {
     // The production default: one unreadable setting is not worth a 500
